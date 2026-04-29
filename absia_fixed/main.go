@@ -38,10 +38,10 @@ func main() {
 		structLog.Warn("API key authentication is disabled — set ABSIA_API_KEY to secure /act endpoint")
 	}
 
-	// ── Configure orchestrator package-level settings ──────────────────────
+	// ── Configure orchestrator package-level settings 
 	orchestrator.SetSeed(cfg.Seed)
 
-	// ── Policy persistence store ───────────────────────────────────────────
+	// ── Policy persistence store 
 	ps, err := policy.New(cfg.PolicyStorePath, structLog)
 	if err != nil {
 		structLog.Warn("policy store unavailable — policies will not persist between restarts",
@@ -53,7 +53,7 @@ func main() {
 		structLog.Info("policy store ready", slog.String("path", cfg.PolicyStorePath))
 	}
 
-	// ── Metrics store ──────────────────────────────────────────────────────
+	// ── Metrics store 
 	store := metricsstore.New(60)
 	api.SetStore(store)
 	api.SetAPIKey(cfg.APIKey)
@@ -70,13 +70,13 @@ func main() {
 		structLog.Warn("rate limiting disabled — set ABSIA_RATE_LIMIT_RPS to enable")
 	}
 
-	// ── Signal-aware root context for graceful shutdown ────────────────────
+	// ── Signal-aware root context for graceful shutdown 
 	// SIGTERM is the standard Kubernetes termination signal.
 	// SIGINT covers Ctrl-C in development.
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	// ── Prometheus poller ──────────────────────────────────────────────────
+	// ── Prometheus poller 
 	if cfg.HasPrometheus() {
 		structLog.Info("Prometheus poller enabled", slog.String("url", cfg.PrometheusURL))
 		bridge := realtime.NewPollerBridge(cfg.PrometheusURL, store)
@@ -86,7 +86,7 @@ func main() {
 		structLog.Warn("PROMETHEUS_URL not set — using synthetic data until /ingest receives >= 4 samples per node")
 	}
 
-	// ── Smoke test ─────────────────────────────────────────────────────────
+	// ── Smoke test 
 	structLog.Info("running pipeline smoke-test", slog.String("params", "arrival=10, service=8, queue=5"))
 	result, err := orchestrator.ExecuteFullPipeline(10.0, 8.0, 5.0)
 	if err != nil {
@@ -104,7 +104,7 @@ func main() {
 		)
 	}
 
-	// ── HTTP server ────────────────────────────────────────────────────────
+	// ── HTTP server 
 	port := 8080
 	if p := os.Getenv("PORT"); p != "" {
 		if v, err := strconv.Atoi(p); err == nil && v > 0 {
