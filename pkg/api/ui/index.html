@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABSIA — Causal Intelligence Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=JetBrains+Mono:wght@300;400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#060a12;
+  --bg1:#0c1220;
+  --bg2:#111827;
+  --bg3:#1a2535;
+  --bg4:#1f2e42;
+  --border:#1e2d3d;
+  --border2:#263647;
+  --t1:#e2e8f4;
+  --t2:#8b9ab5;
+  --t3:#4a5a72;
+  --teal:#00d4b4;
+  --teal-dim:#00b899;
+  --teal-glow:rgba(0,212,180,0.12);
+  --amber:#f59e0b;
+  --amber-dim:#d97706;
+  --amber-glow:rgba(245,158,11,0.12);
+  --coral:#ff4d6d;
+  --coral-dim:#e0344f;
+  --coral-glow:rgba(255,77,109,0.12);
+  --purple:#9b5cf6;
+  --purple-dim:#7c3aed;
+  --purple-glow:rgba(155,92,246,0.12);
+  --blue:#4488ff;
+  --blue-glow:rgba(68,136,255,0.12);
+  --ff-display:'Syne',sans-serif;
+  --ff-mono:'JetBrains Mono',monospace;
+  --ff-body:'IBM Plex Sans',sans-serif;
+  --r:6px;
+  --r2:10px;
+}
+html{font-size:14px;background:var(--bg0);color:var(--t1);font-family:var(--ff-body)}
+body{display:flex;height:100vh;overflow:hidden}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── SIDEBAR ── */
+#sidebar{
+  width:220px;flex-shrink:0;
+  background:var(--bg1);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  padding:0;overflow:hidden;
+  position:relative;z-index:10;
+}
+#sidebar::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(180deg,transparent,transparent 39px,var(--border) 39px,var(--border) 40px);
+  opacity:0.15;pointer-events:none;
+}
+.sidebar-logo{
+  padding:20px 18px 16px;
+  border-bottom:1px solid var(--border);
+  position:relative;
+}
+.logo-mark{display:flex;align-items:center;gap:10px}
+.logo-icon{
+  width:30px;height:30px;flex-shrink:0;
+}
+.logo-text{font-family:var(--ff-display);font-size:18px;font-weight:800;letter-spacing:0.06em;color:var(--t1)}
+.logo-sub{font-family:var(--ff-mono);font-size:9px;color:var(--t3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px}
+.health-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--t3);margin-left:auto;flex-shrink:0;
+  transition:background 0.3s,box-shadow 0.3s;
+}
+.health-dot.ok{background:var(--teal);box-shadow:0 0 8px var(--teal)}
+.health-dot.err{background:var(--coral);box-shadow:0 0 8px var(--coral)}
+
+.nav-section{padding:14px 0 4px;flex:1;overflow-y:auto}
+.nav-label{font-family:var(--ff-mono);font-size:9px;letter-spacing:0.14em;color:var(--t3);text-transform:uppercase;padding:0 18px 6px}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 18px;cursor:pointer;
+  font-family:var(--ff-body);font-size:13px;font-weight:400;color:var(--t2);
+  transition:color 0.15s,background 0.15s;
+  position:relative;
+  border-left:2px solid transparent;
+}
+.nav-item:hover{color:var(--t1);background:var(--bg3)}
+.nav-item.active{color:var(--teal);background:var(--teal-glow);border-left-color:var(--teal)}
+.nav-icon{width:15px;height:15px;flex-shrink:0;opacity:0.7}
+.nav-item.active .nav-icon{opacity:1}
+.nav-item.active .nav-icon path,.nav-item.active .nav-icon circle,.nav-item.active .nav-icon rect{stroke:var(--teal)}
+
+.sidebar-footer{
+  padding:14px 18px;border-top:1px solid var(--border);
+  font-family:var(--ff-mono);font-size:10px;color:var(--t3);
+  display:flex;flex-direction:column;gap:4px;
+}
+.ver-badge{display:inline-flex;align-items:center;gap:5px}
+.data-mode-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:2px 6px;border-radius:3px;font-size:9px;letter-spacing:0.08em;
+  background:var(--bg3);border:1px solid var(--border2);color:var(--t3);
+  text-transform:uppercase;transition:all 0.3s;
+}
+.data-mode-badge.real{background:var(--teal-glow);border-color:var(--teal);color:var(--teal)}
+.data-mode-badge .pulse{
+  width:5px;height:5px;border-radius:50%;background:currentColor;
+  animation:pulse-anim 1.4s ease-in-out infinite;
+}
+@keyframes pulse-anim{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.7)}}
+
+/* ── MAIN CONTENT ── */
+#content{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg0)}
+
+/* ── TOP BAR ── */
+#topbar{
+  height:52px;flex-shrink:0;
+  background:var(--bg1);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;gap:16px;
+}
+.view-title{font-family:var(--ff-display);font-size:15px;font-weight:700;color:var(--t1);flex:1}
+.api-key-wrap{display:flex;align-items:center;gap:8px}
+.api-key-label{font-family:var(--ff-mono);font-size:10px;color:var(--t3);letter-spacing:0.1em}
+#apiKeyInput{
+  background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);
+  color:var(--t2);font-family:var(--ff-mono);font-size:11px;
+  padding:5px 10px;width:200px;outline:none;transition:border-color 0.2s;
+}
+#apiKeyInput:focus{border-color:var(--teal);color:var(--t1)}
+#apiKeyInput::placeholder{color:var(--t3)}
+
+/* ── MAIN SCROLL ── */
+#main-scroll{flex:1;overflow-y:auto;padding:24px}
+
+/* ── VIEWS ── */
+.view{display:none}
+.view.active{display:block}
+
+/* ── GRID HELPERS ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.grid-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+
+/* ── CARDS ── */
+.card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:18px;position:relative;overflow:hidden;
+}
+.card::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,0.012) 0%,transparent 60%);
+  pointer-events:none;
+}
+.card-label{
+  font-family:var(--ff-mono);font-size:9px;letter-spacing:0.14em;
+  color:var(--t3);text-transform:uppercase;margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;
+}
+.card-label svg{width:11px;height:11px;flex-shrink:0}
+.card-val{font-family:var(--ff-mono);font-size:26px;font-weight:500;color:var(--t1);line-height:1}
+.card-val-sm{font-family:var(--ff-mono);font-size:18px;font-weight:500;color:var(--t1);line-height:1}
+.card-sub{font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-top:6px}
+
+/* ── SECTION HEADERS ── */
+.section-head{
+  display:flex;align-items:center;gap:10px;margin-bottom:16px;margin-top:8px;
+}
+.section-head h2{font-family:var(--ff-display);font-size:14px;font-weight:700;color:var(--t1)}
+.section-divider{flex:1;height:1px;background:var(--border)}
+
+/* ── FORM ELEMENTS ── */
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-label{font-family:var(--ff-mono);font-size:10px;letter-spacing:0.1em;color:var(--t3);text-transform:uppercase}
+.form-label span{color:var(--t2);font-size:9px;margin-left:4px;text-transform:none;letter-spacing:0}
+.form-input{
+  background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);
+  color:var(--t1);font-family:var(--ff-mono);font-size:13px;
+  padding:9px 12px;outline:none;width:100%;
+  transition:border-color 0.2s,background 0.2s;
+}
+.form-input:focus{border-color:var(--teal);background:var(--bg4)}
+.form-input::placeholder{color:var(--t3)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* ── BUTTONS ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:9px 18px;border-radius:var(--r);border:none;cursor:pointer;
+  font-family:var(--ff-mono);font-size:12px;font-weight:500;letter-spacing:0.04em;
+  transition:all 0.15s;position:relative;overflow:hidden;
+}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn-primary{background:var(--teal);color:#041a14}
+.btn-primary:hover:not(:disabled){background:#00f0cc;box-shadow:0 0 20px var(--teal-glow)}
+.btn-amber{background:var(--amber);color:#1a0f00}
+.btn-amber:hover:not(:disabled){background:#fbbf24;box-shadow:0 0 20px var(--amber-glow)}
+.btn-purple{background:var(--purple);color:#fff}
+.btn-purple:hover:not(:disabled){background:#a78bfa;box-shadow:0 0 20px var(--purple-glow)}
+.btn-ghost{background:transparent;color:var(--t2);border:1px solid var(--border2)}
+.btn-ghost:hover:not(:disabled){border-color:var(--border);color:var(--t1);background:var(--bg3)}
+.btn svg{width:13px;height:13px;flex-shrink:0}
+
+/* ── PIPELINE FORM CARD ── */
+.pipeline-form-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px}
+.pipeline-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+
+/* ── PHASE STRIPS ── */
+.phases-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0}
+.phase-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 12px;position:relative;overflow:hidden;
+  transition:border-color 0.4s,background 0.4s,box-shadow 0.4s;
+}
+.phase-card.running{
+  border-color:var(--purple);background:var(--purple-glow);
+  box-shadow:0 0 20px var(--purple-glow);
+  animation:phase-pulse 0.8s ease-in-out infinite;
+}
+.phase-card.done{border-color:var(--teal);background:var(--teal-glow)}
+.phase-card.error{border-color:var(--coral);background:var(--coral-glow)}
+@keyframes phase-pulse{0%,100%{box-shadow:0 0 12px var(--purple-glow)}50%{box-shadow:0 0 28px rgba(155,92,246,0.25)}}
+.phase-num{font-family:var(--ff-mono);font-size:9px;color:var(--t3);letter-spacing:0.1em;margin-bottom:7px}
+.phase-name{font-family:var(--ff-body);font-size:12px;font-weight:500;color:var(--t2);line-height:1.3}
+.phase-card.running .phase-name{color:var(--purple)}
+.phase-card.done .phase-name{color:var(--teal)}
+.phase-status-icon{
+  position:absolute;top:10px;right:10px;width:14px;height:14px;
+  display:flex;align-items:center;justify-content:center;
+}
+.phase-card::before{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:transparent;transition:background 0.4s;
+}
+.phase-card.done::before{background:var(--teal)}
+.phase-card.running::before{background:var(--purple)}
+
+/* ── SAFETY GATE ── */
+.safety-gate-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:22px;display:flex;gap:24px;align-items:flex-start;
+}
+.safety-gauge-wrap{flex-shrink:0;position:relative;width:120px}
+.safety-gauge-wrap svg{display:block}
+.safety-score-center{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-42%);
+  text-align:center;pointer-events:none;
+}
+.safety-score-val{font-family:var(--ff-mono);font-size:22px;font-weight:500;color:var(--t1);line-height:1}
+.safety-score-lbl{font-family:var(--ff-mono);font-size:9px;color:var(--t3);letter-spacing:0.1em;margin-top:2px}
+.safety-details{flex:1;min-width:0}
+.safety-state-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px;border-radius:4px;
+  font-family:var(--ff-mono);font-size:11px;font-weight:500;letter-spacing:0.08em;
+  margin-bottom:12px;
+}
+.safety-state-badge.CONFIRMED{background:var(--teal-glow);color:var(--teal);border:1px solid var(--teal)}
+.safety-state-badge.PROBABLE{background:var(--amber-glow);color:var(--amber);border:1px solid var(--amber)}
+.safety-state-badge.UNKNOWN{background:var(--coral-glow);color:var(--coral);border:1px solid var(--coral)}
+.safety-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.safety-row-label{font-family:var(--ff-mono);font-size:10px;color:var(--t3);width:130px;flex-shrink:0}
+.safety-bar-wrap{flex:1;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.safety-bar{height:100%;border-radius:2px;transition:width 0.8s cubic-bezier(0.4,0,0.2,1)}
+.safety-bar.teal{background:var(--teal)}
+.safety-bar.amber{background:var(--amber)}
+.safety-row-val{font-family:var(--ff-mono);font-size:10px;color:var(--t2);width:36px;text-align:right;flex-shrink:0}
+.fallback-reasons{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px}
+.reason-chip{
+  font-family:var(--ff-mono);font-size:9px;letter-spacing:0.06em;
+  padding:2px 7px;border-radius:3px;
+  background:var(--coral-glow);color:var(--coral);border:1px solid rgba(255,77,109,0.3);
+}
+
+/* ── RESULTS SECTION ── */
+.result-block{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  overflow:hidden;
+}
+.result-block-header{
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--ff-mono);font-size:10px;color:var(--t3);letter-spacing:0.12em;text-transform:uppercase;
+}
+.result-block-body{padding:16px 18px}
+.kv-row{
+  display:flex;align-items:baseline;gap:8px;padding:5px 0;
+  border-bottom:1px solid var(--border);
+}
+.kv-row:last-child{border-bottom:none}
+.kv-key{font-family:var(--ff-mono);font-size:11px;color:var(--t3);min-width:160px;flex-shrink:0}
+.kv-val{font-family:var(--ff-mono);font-size:12px;color:var(--t1)}
+.kv-val.teal{color:var(--teal)}
+.kv-val.amber{color:var(--amber)}
+.kv-val.coral{color:var(--coral)}
+
+/* ── CAUSE BARS ── */
+.cause-list{display:flex;flex-direction:column;gap:8px}
+.cause-item{display:flex;align-items:center;gap:10px}
+.cause-node{
+  font-family:var(--ff-mono);font-size:11px;color:var(--t2);
+  width:80px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.cause-bar-wrap{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.cause-bar{height:100%;border-radius:3px;background:var(--teal);transition:width 0.9s cubic-bezier(0.4,0,0.2,1)}
+.cause-val{font-family:var(--ff-mono);font-size:10px;color:var(--t3);width:38px;text-align:right;flex-shrink:0}
+
+/* ── CAUSAL GRAPH ── */
+.graph-canvas-wrap{
+  background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;position:relative;
+}
+#causalGraphSvg{display:block;width:100%}
+
+/* ── ACTIONS TABLE ── */
+.action-card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;display:flex;align-items:flex-start;gap:12px;
+}
+.action-rank{
+  font-family:var(--ff-mono);font-size:20px;font-weight:500;color:var(--t3);
+  width:24px;flex-shrink:0;line-height:1;padding-top:2px;
+}
+.action-rank.rank-1{color:var(--teal)}
+.action-rank.rank-2{color:var(--amber)}
+.action-body{flex:1;min-width:0}
+.action-interventions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.intervention-tag{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:4px;padding:3px 8px;
+  font-family:var(--ff-mono);font-size:11px;color:var(--t2);
+}
+.intervention-tag span{color:var(--amber);font-size:11px}
+.action-score-row{display:flex;align-items:center;gap:8px}
+.action-score-bar{flex:1;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
+.action-score-fill{height:100%;background:var(--teal);border-radius:2px}
+.action-score-val{font-family:var(--ff-mono);font-size:10px;color:var(--t3);width:36px;text-align:right}
+.actions-list{display:flex;flex-direction:column;gap:8px}
+
+/* ── INGEST VIEW ── */
+.ingest-status-bar{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:16px;
+  font-family:var(--ff-mono);font-size:11px;color:var(--t2);
+}
+.pipeline-ready-badge{
+  margin-left:auto;padding:3px 8px;border-radius:3px;
+  font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+}
+.pipeline-ready-badge.ready{background:var(--teal-glow);color:var(--teal);border:1px solid var(--teal)}
+.pipeline-ready-badge.not-ready{background:var(--bg3);color:var(--t3);border:1px solid var(--border2)}
+.ingest-history{margin-top:16px;display:flex;flex-direction:column;gap:6px}
+.ingest-entry{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  font-family:var(--ff-mono);font-size:11px;
+}
+.ingest-entry-node{color:var(--teal);min-width:80px}
+.ingest-entry-vals{color:var(--t2);flex:1}
+.ingest-entry-rho{color:var(--amber);min-width:60px;text-align:right}
+.ingest-entry-time{color:var(--t3);min-width:60px;text-align:right;font-size:10px}
+
+/* ── MONITOR VIEW ── */
+.monitor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.monitor-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;
+}
+.monitor-label{font-family:var(--ff-mono);font-size:9px;color:var(--t3);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:8px}
+.monitor-val{font-family:var(--ff-mono);font-size:20px;font-weight:500;color:var(--t1)}
+.monitor-val.ok{color:var(--teal)}
+.monitor-val.fail{color:var(--coral)}
+.auto-refresh-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-family:var(--ff-mono);font-size:11px;color:var(--t3)}
+.refresh-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse-anim 1.4s ease-in-out infinite}
+.health-timeline{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:16px;margin-top:16px;
+}
+.timeline-bar-row{display:flex;gap:3px;align-items:flex-end;height:48px;margin-top:10px}
+.timeline-bar{
+  flex:1;background:var(--teal);border-radius:2px 2px 0 0;
+  opacity:0.7;transition:opacity 0.2s;min-height:4px;
+}
+.timeline-bar:hover{opacity:1}
+.timeline-bar.fail{background:var(--coral)}
+
+/* ── LOG TERMINAL ── */
+.terminal-box{
+  background:var(--bg0);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;font-family:var(--ff-mono);font-size:11px;
+  max-height:180px;overflow-y:auto;margin-top:14px;
+}
+.log-line{padding:1px 0;display:flex;gap:8px}
+.log-time{color:var(--t3);flex-shrink:0}
+.log-msg{color:var(--t2)}
+.log-msg.ok{color:var(--teal)}
+.log-msg.warn{color:var(--amber)}
+.log-msg.err{color:var(--coral)}
+.log-msg.info{color:var(--blue)}
+
+/* ── EMPTY + ERROR STATES ── */
+.empty-state{
+  padding:32px;text-align:center;
+  font-family:var(--ff-mono);font-size:12px;color:var(--t3);
+}
+.error-box{
+  background:var(--coral-glow);border:1px solid rgba(255,77,109,0.3);border-radius:var(--r);
+  padding:12px 14px;font-family:var(--ff-mono);font-size:11px;color:var(--coral);
+  display:flex;gap:8px;align-items:flex-start;margin-top:12px;
+}
+
+/* ── LOADING SPINNER ── */
+.spinner{
+  width:14px;height:14px;border:2px solid var(--bg3);
+  border-top-color:var(--teal);border-radius:50%;
+  animation:spin 0.7s linear infinite;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── MISC UTILITIES ── */
+.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mt-16{margin-top:16px}.mt-20{margin-top:20px}
+.hidden{display:none!important}
+.text-teal{color:var(--teal)}.text-amber{color:var(--amber)}.text-coral{color:var(--coral)}
+.text-muted{color:var(--t3)}.text-mono{font-family:var(--ff-mono)}
+.row{display:flex;gap:10px;align-items:center}
+.flex1{flex:1}
+.tag{
+  display:inline-flex;align-items:center;padding:1px 6px;border-radius:3px;
+  font-family:var(--ff-mono);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;
+  background:var(--bg3);color:var(--t3);border:1px solid var(--border2);
+}
+</style>
+</head>
+<body>
+
+<!-- ─── SIDEBAR ─────────────────────────────────────── -->
+<aside id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <svg class="logo-icon" viewBox="0 0 30 30" fill="none">
+        <circle cx="6" cy="6" r="4" stroke="#00d4b4" stroke-width="1.5"/>
+        <circle cx="24" cy="6" r="4" stroke="#9b5cf6" stroke-width="1.5"/>
+        <circle cx="6" cy="24" r="4" stroke="#f59e0b" stroke-width="1.5"/>
+        <circle cx="24" cy="24" r="4" stroke="#00d4b4" stroke-width="1.5"/>
+        <circle cx="15" cy="15" r="5" stroke="#e2e8f4" stroke-width="1.5"/>
+        <line x1="10" y1="6" x2="15" y2="10" stroke="#4a5a72" stroke-width="1"/>
+        <line x1="20" y1="6" x2="15" y2="10" stroke="#4a5a72" stroke-width="1"/>
+        <line x1="6" y1="10" x2="10" y2="15" stroke="#4a5a72" stroke-width="1"/>
+        <line x1="24" y1="10" x2="20" y2="15" stroke="#4a5a72" stroke-width="1"/>
+        <line x1="15" y1="20" x2="6" y2="20" stroke="#4a5a72" stroke-width="1"/>
+        <line x1="15" y1="20" x2="24" y2="20" stroke="#4a5a72" stroke-width="1"/>
+        <defs><marker id="ah" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L6 3L0 6" fill="#4a5a72"/></marker></defs>
+        <line x1="10" y1="6" x2="14" y2="10" stroke="#00d4b4" stroke-width="1.2" marker-end="url(#ah)"/>
+      </svg>
+      <div>
+        <div class="logo-text">ABSIA</div>
+        <div class="logo-sub">Causal Engine</div>
+      </div>
+      <div class="health-dot" id="healthDot"></div>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Navigation</div>
+    <div class="nav-item active" data-view="dashboard">
+      <svg class="nav-icon" viewBox="0 0 15 15" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" stroke="#8b9ab5" stroke-width="1.2"/><rect x="8.5" y="1" width="5.5" height="5.5" rx="1" stroke="#8b9ab5" stroke-width="1.2"/><rect x="1" y="8.5" width="5.5" height="5.5" rx="1" stroke="#8b9ab5" stroke-width="1.2"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1" stroke="#8b9ab5" stroke-width="1.2"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" data-view="pipeline">
+      <svg class="nav-icon" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6" stroke="#8b9ab5" stroke-width="1.2"/><path d="M5 7.5L7 9.5L10 6" stroke="#8b9ab5" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Run Pipeline
+    </div>
+    <div class="nav-item" data-view="ingest">
+      <svg class="nav-icon" viewBox="0 0 15 15" fill="none"><path d="M7.5 1V10M4 7L7.5 10.5L11 7" stroke="#8b9ab5" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12h11" stroke="#8b9ab5" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Ingest Data
+    </div>
+    <div class="nav-item" data-view="monitor">
+      <svg class="nav-icon" viewBox="0 0 15 15" fill="none"><path d="M1 10L4 6L6.5 8.5L9 4L12 7L14 5" stroke="#8b9ab5" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Monitor
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="ver-badge"><span>v2.1.0</span></div>
+    <div id="dataModeBadge" class="data-mode-badge"><span class="pulse"></span><span id="dataMode">SYNTHETIC</span></div>
+  </div>
+</aside>
+
+<!-- ─── MAIN ─────────────────────────────────────────── -->
+<div id="content">
+  <header id="topbar">
+    <span class="view-title" id="viewTitle">Dashboard</span>
+    <div class="api-key-wrap">
+      <span class="api-key-label">API KEY</span>
+      <input type="password" id="apiKeyInput" placeholder="for /act endpoint" autocomplete="off">
+    </div>
+  </header>
+  <div id="main-scroll">
+
+    <!-- ─── DASHBOARD VIEW ─────────────── -->
+    <section class="view active" id="view-dashboard">
+      <div class="grid-auto mt-8">
+        <div class="card">
+          <div class="card-label">
+            <svg viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.2"/><circle cx="5.5" cy="5.5" r="1.5" fill="currentColor"/></svg>
+            System Status
+          </div>
+          <div class="card-val" id="db-status">—</div>
+          <div class="card-sub" id="db-status-sub">Checking…</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Nodes Ingested</div>
+          <div class="card-val" id="db-nodes">—</div>
+          <div class="card-sub" id="db-nodes-sub">pipeline threshold: 4 samples</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Auth Mode</div>
+          <div class="card-val-sm" id="db-auth">—</div>
+          <div class="card-sub">/act endpoint</div>
+        </div>
+        <div class="card">
+          <div class="card-label">API Version</div>
+          <div class="card-val-sm" id="db-ver">—</div>
+          <div class="card-sub">backend build</div>
+        </div>
+      </div>
+
+      <div class="section-head mt-20">
+        <h2>Quick Run</h2><div class="section-divider"></div>
+      </div>
+      <div class="pipeline-form-card">
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label class="form-label">Arrival Rate λ <span>(requests/s)</span></label>
+            <input class="form-input" id="qs-arrival" type="number" min="0" step="0.1" value="12" placeholder="12.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Service Rate μ <span>(requests/s)</span></label>
+            <input class="form-input" id="qs-service" type="number" min="0.1" step="0.1" value="8" placeholder="8.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Queue Length <span>(msgs)</span></label>
+            <input class="form-input" id="qs-queue" type="number" min="0" step="1" value="5" placeholder="5">
+          </div>
+        </div>
+        <div class="pipeline-actions">
+          <button class="btn btn-primary" onclick="App.quickRun('analyze')">
+            <svg viewBox="0 0 13 13" fill="none"><path d="M2 6.5L5 9.5L11 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Analyze
+          </button>
+          <button class="btn btn-ghost" onclick="App.quickRun('explain')">Explain</button>
+          <button class="btn btn-ghost" onclick="App.quickRun('act')">Act</button>
+        </div>
+        <div id="qs-result" class="hidden mt-12"></div>
+      </div>
+
+      <div class="section-head mt-20">
+        <h2>Endpoints</h2><div class="section-divider"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="endpoint-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--teal);width:36px">GET</span>
+          <span style="font-family:var(--ff-mono);font-size:12px;color:var(--t1)">/health</span>
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto">Liveness probe — system state, node count, auth mode</span>
+        </div>
+        <div class="endpoint-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--blue);width:36px">POST</span>
+          <span style="font-family:var(--ff-mono);font-size:12px;color:var(--t1)">/ingest</span>
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto">Store metrics sample — accumulates time-series per node</span>
+        </div>
+        <div class="endpoint-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--blue);width:36px">POST</span>
+          <span style="font-family:var(--ff-mono);font-size:12px;color:var(--t1)">/analyze</span>
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto">Full 5-phase pipeline — root cause, safety gate, backdoor effects</span>
+        </div>
+        <div class="endpoint-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--blue);width:36px">POST</span>
+          <span style="font-family:var(--ff-mono);font-size:12px;color:var(--t1)">/explain</span>
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto">Causal explanation — cause list, effects, uncertainty</span>
+        </div>
+        <div class="endpoint-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--purple);width:36px">POST</span>
+          <span style="font-family:var(--ff-mono);font-size:12px;color:var(--t1)">/act</span>
+          <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto">RL intervention actions — auth required, safety-gated</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── PIPELINE VIEW ──────────────── -->
+    <section class="view" id="view-pipeline">
+      <div class="pipeline-form-card">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Node ID <span>(optional)</span></label>
+            <input class="form-input" id="pl-node" type="text" placeholder="primary">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Arrival Rate λ <span>(req/s)</span></label>
+            <input class="form-input" id="pl-arrival" type="number" min="0" step="0.1" value="10" placeholder="10.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Service Rate μ <span>(req/s)</span></label>
+            <input class="form-input" id="pl-service" type="number" min="0.1" step="0.1" value="8" placeholder="8.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Queue Length</label>
+            <input class="form-input" id="pl-queue" type="number" min="0" step="1" value="5" placeholder="5">
+          </div>
+        </div>
+        <div class="pipeline-actions">
+          <button class="btn btn-primary" id="btnAnalyze" onclick="App.runPipeline('analyze')">
+            <span id="btnAnalyzeIcon"><svg viewBox="0 0 13 13" fill="none"><path d="M2 6.5L5 9.5L11 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Analyze
+          </button>
+          <button class="btn btn-amber" id="btnExplain" onclick="App.runPipeline('explain')">Explain</button>
+          <button class="btn btn-purple" id="btnAct" onclick="App.runPipeline('act')">Act (auth)</button>
+        </div>
+        <div id="pl-error" class="hidden"></div>
+      </div>
+
+      <!-- Phase animation strip -->
+      <div class="phases-row" id="phasesRow">
+        <div class="phase-card" id="phase-1">
+          <div class="phase-num">PHASE 01</div>
+          <div class="phase-name">Signal Physics</div>
+          <div class="phase-status-icon" id="ph1-icon"></div>
+        </div>
+        <div class="phase-card" id="phase-2">
+          <div class="phase-num">PHASE 02</div>
+          <div class="phase-name">Pattern Detection</div>
+          <div class="phase-status-icon" id="ph2-icon"></div>
+        </div>
+        <div class="phase-card" id="phase-3">
+          <div class="phase-num">PHASE 03</div>
+          <div class="phase-name">Causal Graph</div>
+          <div class="phase-status-icon" id="ph3-icon"></div>
+        </div>
+        <div class="phase-card" id="phase-4">
+          <div class="phase-num">PHASE 04</div>
+          <div class="phase-name">Explanation</div>
+          <div class="phase-status-icon" id="ph4-icon"></div>
+        </div>
+        <div class="phase-card" id="phase-5">
+          <div class="phase-num">PHASE 05</div>
+          <div class="phase-name">RL Policy</div>
+          <div class="phase-status-icon" id="ph5-icon"></div>
+        </div>
+      </div>
+
+      <!-- Terminal log -->
+      <div class="terminal-box" id="terminalLog">
+        <div class="log-line"><span class="log-time">00:00:00</span><span class="log-msg">ABSIA pipeline ready — submit parameters to run analysis</span></div>
+      </div>
+
+      <!-- Results appear here -->
+      <div id="pipelineResults" class="hidden">
+
+        <div class="section-head mt-20">
+          <h2>Safety Gate</h2><div class="section-divider"></div>
+        </div>
+        <div class="safety-gate-card" id="safetyGateCard">
+          <div class="safety-gauge-wrap">
+            <svg id="safetyGaugeSvg" viewBox="0 0 120 90" width="120" height="90">
+              <path d="M15 80 A55 55 0 0 1 105 80" fill="none" stroke="#1a2535" stroke-width="10" stroke-linecap="round"/>
+              <path id="safetyArcFill" d="M15 80 A55 55 0 0 1 105 80" fill="none" stroke="#00d4b4" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 172" style="transition:stroke-dasharray 1s cubic-bezier(0.4,0,0.2,1),stroke 0.5s"/>
+            </svg>
+            <div class="safety-score-center">
+              <div class="safety-score-val" id="safetyScoreVal">—</div>
+              <div class="safety-score-lbl">SCORE</div>
+            </div>
+          </div>
+          <div class="safety-details">
+            <div class="safety-state-badge UNKNOWN" id="safetyStateBadge">UNKNOWN</div>
+            <div class="safety-row">
+              <span class="safety-row-label">Graph Coverage</span>
+              <div class="safety-bar-wrap"><div class="safety-bar teal" id="barCoverage" style="width:0%"></div></div>
+              <span class="safety-row-val" id="valCoverage">—</span>
+            </div>
+            <div class="safety-row">
+              <span class="safety-row-label">Determinism</span>
+              <div class="safety-bar-wrap"><div class="safety-bar teal" id="barDeterminism" style="width:0%"></div></div>
+              <span class="safety-row-val" id="valDeterminism">—</span>
+            </div>
+            <div class="safety-row">
+              <span class="safety-row-label">Latent Risk</span>
+              <div class="safety-bar-wrap"><div class="safety-bar amber" id="barRisk" style="width:0%"></div></div>
+              <span class="safety-row-val" id="valRisk">—</span>
+            </div>
+            <div id="fallbackReasonsWrap" class="hidden">
+              <div style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-top:8px;margin-bottom:4px">Fallback Reasons</div>
+              <div class="fallback-reasons" id="fallbackReasons"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analyze results -->
+        <div id="analyzeResults" class="hidden">
+          <div class="section-head mt-20">
+            <h2>Analysis Results</h2><div class="section-divider"></div>
+          </div>
+          <div class="grid-2">
+            <div class="result-block">
+              <div class="result-block-header">
+                <svg viewBox="0 0 11 11" fill="none" style="width:11px;height:11px"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.2"/><circle cx="5.5" cy="5.5" r="1.5" fill="currentColor"/></svg>
+                Inference Summary
+              </div>
+              <div class="result-block-body">
+                <div class="kv-row"><span class="kv-key">root_cause</span><span class="kv-val teal" id="r-rootcause">—</span></div>
+                <div class="kv-row"><span class="kv-key">physics_root</span><span class="kv-val" id="r-physroot">—</span></div>
+                <div class="kv-row"><span class="kv-key">patterns_detected</span><span class="kv-val" id="r-patterns">—</span></div>
+                <div class="kv-row"><span class="kv-key">actions_recommended</span><span class="kv-val" id="r-actions">—</span></div>
+                <div class="kv-row"><span class="kv-key">data_source</span><span class="kv-val amber" id="r-datasrc">—</span></div>
+                <div class="kv-row"><span class="kv-key">execution_time_ms</span><span class="kv-val" id="r-exectime">—</span></div>
+              </div>
+            </div>
+            <div class="result-block">
+              <div class="result-block-header">Causal Effect Magnitudes</div>
+              <div class="result-block-body">
+                <div class="cause-list" id="causeMagnitudeList">
+                  <div class="empty-state" style="padding:16px">No causal drivers detected</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-16 result-block" id="backdoorBlock">
+            <div class="result-block-header">Backdoor-Adjusted Effects</div>
+            <div class="result-block-body"><div class="cause-list" id="backdoorList"></div></div>
+          </div>
+        </div>
+
+        <!-- Explain results -->
+        <div id="explainResults" class="hidden">
+          <div class="section-head mt-20">
+            <h2>Causal Explanation</h2><div class="section-divider"></div>
+          </div>
+          <div class="grid-2">
+            <div class="result-block">
+              <div class="result-block-header">Causal Structure</div>
+              <div class="result-block-body">
+                <div class="kv-row"><span class="kv-key">root_cause</span><span class="kv-val teal" id="ex-rootcause">—</span></div>
+                <div class="kv-row"><span class="kv-key">cause_count</span><span class="kv-val" id="ex-causecount">—</span></div>
+                <div class="kv-row"><span class="kv-key">data_source</span><span class="kv-val amber" id="ex-datasrc">—</span></div>
+                <div class="kv-row"><span class="kv-key">execution_time_ms</span><span class="kv-val" id="ex-exectime">—</span></div>
+              </div>
+            </div>
+            <div class="result-block">
+              <div class="result-block-header">Effect Magnitudes + Uncertainty</div>
+              <div class="result-block-body">
+                <div class="cause-list" id="explainEffectList"></div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-16">
+            <div class="result-block-header" style="padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r) var(--r) 0 0">Causal Graph</div>
+            <div class="graph-canvas-wrap" style="border-top:none;border-radius:0 0 var(--r) var(--r)">
+              <svg id="causalGraphSvg" height="220"></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Act results -->
+        <div id="actResults" class="hidden">
+          <div class="section-head mt-20">
+            <h2>Intervention Actions</h2><div class="section-divider"></div>
+          </div>
+          <div class="row mt-8" style="margin-bottom:12px">
+            <div class="tag" id="actDataSrc">—</div>
+            <div class="tag" id="actPolicyStatus">—</div>
+            <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto" id="actExecTime">—</span>
+          </div>
+          <div class="actions-list" id="actionsList">
+            <div class="empty-state">No actions returned</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─── INGEST VIEW ──────────────── -->
+    <section class="view" id="view-ingest">
+      <div id="ingestStatus" class="ingest-status-bar">
+        <svg viewBox="0 0 12 12" fill="none" style="width:12px;height:12px;flex-shrink:0"><circle cx="6" cy="6" r="5" stroke="#4a5a72" stroke-width="1.2"/></svg>
+        <span id="ingestStatusText">No data ingested yet</span>
+        <div class="pipeline-ready-badge not-ready" id="pipelineReadyBadge">Not Ready</div>
+      </div>
+
+      <div class="pipeline-form-card">
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label class="form-label">Node ID</label>
+            <input class="form-input" id="ig-node" type="text" placeholder="service-a" value="primary">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Arrival Rate λ</label>
+            <input class="form-input" id="ig-arrival" type="number" min="0" step="0.1" value="10">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Service Rate μ</label>
+            <input class="form-input" id="ig-service" type="number" min="0.1" step="0.1" value="8">
+          </div>
+        </div>
+        <div class="form-grid mt-12" style="grid-template-columns:1fr 2fr">
+          <div class="form-group">
+            <label class="form-label">Queue Length</label>
+            <input class="form-input" id="ig-queue" type="number" min="0" step="1" value="5">
+          </div>
+          <div class="form-group" style="justify-content:flex-end;flex-direction:row;align-items:flex-end;gap:8px">
+            <button class="btn btn-primary" onclick="App.ingestSample()">
+              <svg viewBox="0 0 13 13" fill="none"><path d="M6.5 2V9M3.5 6.5L6.5 9.5L9.5 6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Ingest Sample
+            </button>
+            <button class="btn btn-ghost" onclick="App.ingestBatch()">Batch ×10</button>
+          </div>
+        </div>
+        <div id="ig-error" class="hidden"></div>
+      </div>
+
+      <div class="section-head mt-20">
+        <h2>Ingest History</h2><div class="section-divider"></div>
+      </div>
+      <div style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-bottom:8px;display:flex;gap:20px">
+        <span style="min-width:80px">NODE</span>
+        <span style="flex:1">λ / μ / Q</span>
+        <span style="min-width:60px;text-align:right">ρ</span>
+        <span style="min-width:60px;text-align:right">TIME</span>
+      </div>
+      <div class="ingest-history" id="ingestHistory">
+        <div class="empty-state">No samples ingested in this session</div>
+      </div>
+    </section>
+
+    <!-- ─── MONITOR VIEW ──────────────── -->
+    <section class="view" id="view-monitor">
+      <div class="auto-refresh-row">
+        <div class="refresh-dot"></div>
+        <span>Auto-refresh every 5s</span>
+        <span id="monLastRefresh" style="margin-left:auto"></span>
+      </div>
+      <div class="monitor-grid" id="monitorGrid">
+        <div class="monitor-card">
+          <div class="monitor-label">Status</div>
+          <div class="monitor-val" id="mon-status">—</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-label">Ready</div>
+          <div class="monitor-val" id="mon-ready">—</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-label">Real Data</div>
+          <div class="monitor-val" id="mon-realdata">—</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-label">Node Count</div>
+          <div class="monitor-val" id="mon-nodes">—</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-label">Auth Mode</div>
+          <div class="monitor-val" id="mon-auth">—</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-label">Version</div>
+          <div class="monitor-val" id="mon-ver">—</div>
+        </div>
+      </div>
+      <div class="health-timeline">
+        <div class="card-label">Health History (last 40 polls)</div>
+        <div class="timeline-bar-row" id="timelineBarRow"></div>
+      </div>
+    </section>
+
+  </div><!-- /main-scroll -->
+</div><!-- /content -->
+
+<script>
+'use strict';
+
+const BASE = window.location.origin;
+const $ = id => document.getElementById(id);
+const ts = () => new Date().toLocaleTimeString('en-US',{hour12:false});
+
+// ── NAVIGATION ──────────────────────────────────────────────────────────────
+const titles = {dashboard:'Dashboard',pipeline:'Run Pipeline',ingest:'Ingest Data',monitor:'Monitor'};
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    el.classList.add('active');
+    $('view-' + el.dataset.view).classList.add('active');
+    $('viewTitle').textContent = titles[el.dataset.view] || '';
+  });
+});
+
+// ── HEALTH POLLING ───────────────────────────────────────────────────────────
+const healthHistory = [];
+
+async function pollHealth() {
+  try {
+    const r = await fetch(BASE + '/health');
+    const d = await r.json();
+    updateHealth(d, true);
+    healthHistory.push({ok:true, ts:Date.now()});
+  } catch(e) {
+    updateHealth(null, false);
+    healthHistory.push({ok:false, ts:Date.now()});
+  }
+  if (healthHistory.length > 40) healthHistory.shift();
+  renderTimeline();
+  $('monLastRefresh').textContent = 'Last: ' + ts();
+}
+
+function updateHealth(d, ok) {
+  const dot = $('healthDot');
+  dot.className = 'health-dot ' + (ok ? 'ok' : 'err');
+
+  if (!d) {
+    $('db-status').textContent = 'Unreachable';
+    $('db-status').className = 'card-val text-coral';
+    $('db-status-sub').textContent = 'Cannot reach backend';
+    $('mon-status').textContent = 'DOWN';
+    $('mon-status').className = 'monitor-val fail';
+    return;
+  }
+
+  const statusColor = d.status === 'ok' ? 'text-teal' : 'text-coral';
+  $('db-status').textContent = d.status?.toUpperCase() || '?';
+  $('db-status').className = 'card-val ' + statusColor;
+  $('db-status-sub').textContent = d.ready ? 'Ready to process requests' : 'Not ready';
+  $('db-nodes').textContent = d.ingested_node_count ?? '0';
+  $('db-nodes-sub').textContent = d.real_data_available ? 'Real data active' : 'Using synthetic fallback';
+  $('db-auth').textContent = d.auth_mode || 'disabled';
+  $('db-ver').textContent = d.version || '—';
+
+  const mode = d.real_data_available ? 'real' : 'synthetic';
+  const badge = $('dataModeBadge');
+  badge.className = 'data-mode-badge ' + (d.real_data_available ? 'real' : '');
+  $('dataMode').textContent = mode.toUpperCase();
+
+  $('mon-status').textContent = d.status?.toUpperCase() || '—';
+  $('mon-status').className = 'monitor-val ' + (d.status === 'ok' ? 'ok' : 'fail');
+  $('mon-ready').textContent = d.ready ? 'YES' : 'NO';
+  $('mon-ready').className = 'monitor-val ' + (d.ready ? 'ok' : '');
+  $('mon-realdata').textContent = d.real_data_available ? 'YES' : 'NO';
+  $('mon-realdata').className = 'monitor-val ' + (d.real_data_available ? 'ok' : '');
+  $('mon-nodes').textContent = d.ingested_node_count ?? '0';
+  $('mon-auth').textContent = d.auth_mode || 'disabled';
+  $('mon-ver').textContent = d.version || '—';
+}
+
+function renderTimeline() {
+  const row = $('timelineBarRow');
+  if (!row) return;
+  row.innerHTML = '';
+  const maxH = 40;
+  healthHistory.forEach((h, i) => {
+    const bar = document.createElement('div');
+    const height = maxH - Math.abs(healthHistory.length - 1 - i) * 0.4;
+    bar.className = 'timeline-bar' + (h.ok ? '' : ' fail');
+    bar.style.height = Math.max(4, height) + 'px';
+    bar.title = new Date(h.ts).toLocaleTimeString() + ' — ' + (h.ok ? 'OK' : 'FAIL');
+    row.appendChild(bar);
+  });
+}
+
+pollHealth();
+setInterval(pollHealth, 5000);
+
+// ── LOG TERMINAL ─────────────────────────────────────────────────────────────
+function log(msg, cls='') {
+  const box = $('terminalLog');
+  if (!box) return;
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${ts()}</span><span class="log-msg ${cls}">${msg}</span>`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── PIPELINE PHASES ──────────────────────────────────────────────────────────
+function resetPhases() {
+  for (let i = 1; i <= 5; i++) {
+    const c = $('phase-' + i);
+    c.className = 'phase-card';
+    $('ph' + i + '-icon').innerHTML = '';
+  }
+}
+
+const TICK = svg => `<svg viewBox="0 0 14 14" fill="none" width="14" height="14"><path d="M2 7L5.5 10.5L12 4" stroke="${svg}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const SPIN_HTML = `<div class="spinner" style="width:12px;height:12px"></div>`;
+
+async function animatePhases(execTimeMs) {
+  const phases = [
+    {name:'Signal Physics', desc:'Computing ρ = λ/μ, queue delay'},
+    {name:'Pattern Detection', desc:'Detecting regimes + dynamics'},
+    {name:'Causal Graph', desc:'D-separation + intervention engine'},
+    {name:'Explanation', desc:'Generating causal explanation'},
+    {name:'RL Policy + Safety', desc:'Training policy + safety gate'},
+  ];
+  const perPhase = Math.max(180, execTimeMs / 5);
+  for (let i = 0; i < 5; i++) {
+    const c = $('phase-' + (i+1));
+    const icon = $('ph' + (i+1) + '-icon');
+    c.className = 'phase-card running';
+    icon.innerHTML = SPIN_HTML;
+    log(`[Phase ${i+1}] ${phases[i].desc}`, 'info');
+    await sleep(perPhase);
+    c.className = 'phase-card done';
+    icon.innerHTML = TICK('#00d4b4');
+  }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── PIPELINE REQUEST ─────────────────────────────────────────────────────────
+async function callPipeline(endpoint, body, apiKey) {
+  const headers = {'Content-Type':'application/json'};
+  if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+  const r = await fetch(BASE + '/' + endpoint, {method:'POST', headers, body: JSON.stringify(body)});
+  return {status: r.status, data: await r.json()};
+}
+
+// ── SAFETY GATE RENDERER ─────────────────────────────────────────────────────
+function renderSafetyGate(safety) {
+  if (!safety) return;
+
+  const score = safety.confidence_score ?? 0;
+  const scoreEl = $('safetyScoreVal');
+  scoreEl.textContent = (score * 100).toFixed(0) + '%';
+
+  // Arc: total arc length ≈ 172px (semicircle at r=55)
+  const arc = score * 172;
+  const fill = $('safetyArcFill');
+  fill.style.strokeDasharray = arc + ' ' + (172 - arc);
+
+  const state = safety.confidence_state || 'UNKNOWN';
+  const badge = $('safetyStateBadge');
+  badge.className = 'safety-state-badge ' + state;
+  badge.textContent = state;
+
+  const colors = {CONFIRMED:'#00d4b4', PROBABLE:'#f59e0b', UNKNOWN:'#ff4d6d'};
+  fill.style.stroke = colors[state] || '#4a5a72';
+
+  const risk = safety.latent_risk || 'HIGH';
+  const riskScore = risk === 'LOW' ? 0.1 : risk === 'MEDIUM' ? 0.5 : 0.9;
+
+  const coverage = safety.graph_coverage ?? 0;
+  const det = safety.determinism ?? 0;
+
+  setBar('barCoverage', 'valCoverage', coverage);
+  setBar('barDeterminism', 'valDeterminism', det);
+  setBar('barRisk', 'valRisk', riskScore, true);
+  $('valRisk').textContent = risk;
+
+  const reasons = safety.fallback_reasons || [];
+  const fallbackWrap = $('fallbackReasonsWrap');
+  if (safety.fallback_triggered && reasons.length) {
+    fallbackWrap.classList.remove('hidden');
+    $('fallbackReasons').innerHTML = reasons.map(r => `<span class="reason-chip">${r}</span>`).join('');
+  } else {
+    fallbackWrap.classList.add('hidden');
+  }
+}
+
+function setBar(barId, valId, v, inverse=false) {
+  const pct = Math.round(v * 100);
+  $(barId).style.width = pct + '%';
+  $(barId).style.background = inverse
+    ? (pct > 60 ? 'var(--coral)' : pct > 30 ? 'var(--amber)' : 'var(--teal)')
+    : (pct > 60 ? 'var(--teal)' : pct > 30 ? 'var(--amber)' : 'var(--coral)');
+  if (valId && $(valId)) $(valId).textContent = typeof v === 'number' && v <= 1 && v >= 0 ? v.toFixed(2) : '—';
+}
+
+// ── CAUSE BAR RENDERER ───────────────────────────────────────────────────────
+function renderCauseBars(containerId, causeMap, maxVal) {
+  const el = $(containerId);
+  if (!causeMap || Object.keys(causeMap).length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:10px">No causes detected</div>';
+    return;
+  }
+  const max = maxVal || Math.max(...Object.values(causeMap), 0.001);
+  el.innerHTML = Object.entries(causeMap)
+    .sort((a,b) => b[1] - a[1])
+    .map(([node, val]) => {
+      const pct = Math.round((val / max) * 100);
+      return `<div class="cause-item">
+        <span class="cause-node" title="${node}">${node}</span>
+        <div class="cause-bar-wrap"><div class="cause-bar" style="width:${pct}%"></div></div>
+        <span class="cause-val">${val.toFixed(3)}</span>
+      </div>`;
+    }).join('');
+}
+
+// ── CAUSAL GRAPH SVG RENDERER ────────────────────────────────────────────────
+function renderCausalGraph(svgEl, rootCause, causes, effects) {
+  if (!svgEl) return;
+  const W = svgEl.parentElement?.offsetWidth || 500;
+  svgEl.setAttribute('width', W);
+  svgEl.setAttribute('height', 220);
+  svgEl.setAttribute('viewBox', `0 0 ${W} 220`);
+
+  const nodes = [];
+  const edges = [];
+
+  if (rootCause) {
+    nodes.push({id: rootCause, x: W/2, y: 45, type:'root', val: 1});
+  }
+
+  const causeKeys = Array.isArray(causes) ? causes : Object.keys(causes || {});
+  const effectMap = effects || (typeof causes === 'object' && !Array.isArray(causes) ? causes : {});
+
+  causeKeys.forEach((c, i) => {
+    const x = W * (i + 1) / (causeKeys.length + 1);
+    nodes.push({id: c, x, y: 150, type:'cause', val: effectMap[c] || 0.5});
+    if (rootCause) edges.push({from: rootCause, to: c});
+  });
+
+  // Render
+  let html = `<defs>
+    <marker id="gArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M1 1L9 5L1 9" fill="none" stroke="#4a5a72" stroke-width="1.5"/>
+    </marker>
+  </defs>`;
+
+  edges.forEach(e => {
+    const from = nodes.find(n => n.id === e.from);
+    const to = nodes.find(n => n.id === e.to);
+    if (!from || !to) return;
+    html += `<line x1="${from.x}" y1="${from.y+16}" x2="${to.x}" y2="${to.y-16}" stroke="#263647" stroke-width="1.5" marker-end="url(#gArrow)"/>`;
+  });
+
+  nodes.forEach(n => {
+    const r = n.type === 'root' ? 18 : Math.max(12, Math.min(18, 12 + n.val * 10));
+    const color = n.type === 'root' ? '#ff4d6d' : '#00d4b4';
+    const bgColor = n.type === 'root' ? 'rgba(255,77,109,0.15)' : 'rgba(0,212,180,0.1)';
+    const shortId = n.id.length > 10 ? n.id.substring(0,9)+'…' : n.id;
+    html += `<g>
+      <circle cx="${n.x}" cy="${n.y}" r="${r+4}" fill="${bgColor}"/>
+      <circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${n.type==='root'?'rgba(255,77,109,0.2)':'rgba(0,212,180,0.15)'}" stroke="${color}" stroke-width="1.5"/>
+      <text x="${n.x}" y="${n.y+4}" text-anchor="middle" fill="${color}" font-family="JetBrains Mono,monospace" font-size="8" font-weight="500">${shortId}</text>
+      ${n.type!=='root' && n.val ? `<text x="${n.x}" y="${n.y+18}" text-anchor="middle" fill="#4a5a72" font-family="JetBrains Mono,monospace" font-size="9">${n.val.toFixed(2)}</text>` : ''}
+    </g>`;
+  });
+
+  if (nodes.length === 0) {
+    html += `<text x="${W/2}" y="110" text-anchor="middle" fill="#4a5a72" font-family="JetBrains Mono,monospace" font-size="12">No causal graph data</text>`;
+  }
+
+  svgEl.innerHTML = html;
+}
+
+// ── MAIN APP CONTROLLER ──────────────────────────────────────────────────────
+const App = {
+
+  getFormValues(prefix) {
+    return {
+      node_id: $(prefix+'-node')?.value?.trim() || undefined,
+      arrival_rate: parseFloat($(prefix+'-arrival').value) || 10,
+      service_rate: parseFloat($(prefix+'-service').value) || 8,
+      queue_length: parseFloat($(prefix+'-queue').value) || 5,
+    };
+  },
+
+  showError(elId, msg) {
+    const el = $(elId);
+    el.innerHTML = `<div class="error-box"><svg viewBox="0 0 13 13" fill="none" style="width:13px;height:13px;flex-shrink:0"><circle cx="6.5" cy="6.5" r="5.5" stroke="#ff4d6d" stroke-width="1.2"/><path d="M6.5 4v3M6.5 9v.5" stroke="#ff4d6d" stroke-width="1.2" stroke-linecap="round"/></svg>${msg}</div>`;
+    el.classList.remove('hidden');
+  },
+
+  clearError(elId) { $(elId).classList.add('hidden'); },
+
+  setButtonsDisabled(disabled) {
+    ['btnAnalyze','btnExplain','btnAct'].forEach(id => {
+      const b = $(id);
+      if (b) b.disabled = disabled;
+    });
+  },
+
+  async runPipeline(endpoint) {
+    const body = this.getFormValues('pl');
+    if (!body.node_id) delete body.node_id;
+    const apiKey = $('apiKeyInput').value.trim();
+
+    this.clearError('pl-error');
+    this.setButtonsDisabled(true);
+    resetPhases();
+    $('pipelineResults').classList.add('hidden');
+    $('analyzeResults').classList.add('hidden');
+    $('explainResults').classList.add('hidden');
+    $('actResults').classList.add('hidden');
+
+    log(`Running /${endpoint} — λ=${body.arrival_rate} μ=${body.service_rate} Q=${body.queue_length}`, 'info');
+
+    // Start phase animation in background
+    const phasePromise = animatePhases(1200);
+
+    let resp;
+    try {
+      resp = await callPipeline(endpoint, body, apiKey);
+    } catch(e) {
+      this.setButtonsDisabled(false);
+      this.showError('pl-error', 'Network error: ' + e.message);
+      log('ERROR: ' + e.message, 'err');
+      return;
+    }
+
+    await phasePromise;
+    this.setButtonsDisabled(false);
+
+    if (!resp.data.success && resp.status !== 503) {
+      const errs = (resp.data.errors || ['Unknown error']).join(', ');
+      this.showError('pl-error', errs);
+      log('ERROR: ' + errs, 'err');
+      return;
+    }
+
+    log(`Done — ${resp.data.execution_time_ms?.toFixed(1) || '?'}ms — confidence: ${resp.data.safety?.confidence_state || '?'}`, 'ok');
+
+    $('pipelineResults').classList.remove('hidden');
+    renderSafetyGate(resp.data.safety);
+
+    if (endpoint === 'analyze') {
+      $('analyzeResults').classList.remove('hidden');
+      const d = resp.data;
+      $('r-rootcause').textContent = d.root_cause || '(none detected)';
+      $('r-physroot').textContent = d.physics_root_cause || '—';
+      $('r-patterns').textContent = d.patterns_detected ?? '—';
+      $('r-actions').textContent = d.actions_recommended ?? '—';
+      $('r-datasrc').textContent = d.data_source || '—';
+      $('r-exectime').textContent = d.execution_time_ms ? d.execution_time_ms.toFixed(2) + ' ms' : '—';
+      renderCauseBars('causeMagnitudeList', d.causes);
+      if (d.backdoor_effects && Object.keys(d.backdoor_effects).length) {
+        $('backdoorBlock').classList.remove('hidden');
+        renderCauseBars('backdoorList', d.backdoor_effects);
+      } else {
+        $('backdoorBlock').classList.add('hidden');
+      }
+    }
+
+    if (endpoint === 'explain') {
+      $('explainResults').classList.remove('hidden');
+      const d = resp.data;
+      $('ex-rootcause').textContent = d.root_cause || '(none)';
+      $('ex-causecount').textContent = (d.causes || []).length;
+      $('ex-datasrc').textContent = d.data_source || '—';
+      $('ex-exectime').textContent = d.execution_time_ms ? d.execution_time_ms.toFixed(2) + ' ms' : '—';
+      renderCauseBars('explainEffectList', d.effects);
+      renderCausalGraph($('causalGraphSvg'), d.root_cause, d.causes, d.effects);
+    }
+
+    if (endpoint === 'act') {
+      $('actResults').classList.remove('hidden');
+      const d = resp.data;
+      $('actDataSrc').textContent = (d.data_source || '—').toUpperCase();
+      $('actPolicyStatus').textContent = d.policy_trained ? 'POLICY TRAINED' : 'NO POLICY';
+      $('actExecTime').textContent = d.execution_time_ms ? d.execution_time_ms.toFixed(2) + ' ms' : '';
+
+      if (resp.status === 503) {
+        $('actionsList').innerHTML = `<div class="error-box">Safety gate UNKNOWN — automated action blocked. Human review required.</div>`;
+      } else {
+        const actions = d.recommended_actions || [];
+        if (!actions.length) {
+          $('actionsList').innerHTML = '<div class="empty-state">No actions returned</div>';
+        } else {
+          $('actionsList').innerHTML = actions.map(a => {
+            const rank = a.policy_rank || '?';
+            const score = a.policy_score ?? 0;
+            const interventions = Object.entries(a.interventions || {});
+            const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : '';
+            const tags = interventions.map(([k,v]) =>
+              `<span class="intervention-tag">${k} <span>→ ${v.toFixed(2)}</span></span>`
+            ).join('');
+            return `<div class="action-card">
+              <span class="action-rank ${rankClass}">${rank}</span>
+              <div class="action-body">
+                <div class="action-interventions">${tags || '<span style="color:var(--t3);font-family:var(--ff-mono);font-size:11px">No interventions</span>'}</div>
+                <div class="action-score-row">
+                  <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);width:70px">policy score</span>
+                  <div class="action-score-bar"><div class="action-score-fill" style="width:${Math.round(score*100)}%"></div></div>
+                  <span class="action-score-val">${score.toFixed(3)}</span>
+                </div>
+              </div>
+            </div>`;
+          }).join('');
+        }
+      }
+    }
+
+    pollHealth();
+  },
+
+  async quickRun(endpoint) {
+    const body = {
+      arrival_rate: parseFloat($('qs-arrival').value) || 10,
+      service_rate: parseFloat($('qs-service').value) || 8,
+      queue_length: parseFloat($('qs-queue').value) || 5,
+    };
+    const el = $('qs-result');
+    el.innerHTML = `<div class="row"><div class="spinner"></div><span style="font-family:var(--ff-mono);font-size:11px;color:var(--t2)">Running /${endpoint}…</span></div>`;
+    el.classList.remove('hidden');
+    try {
+      const {status, data} = await callPipeline(endpoint, body, $('apiKeyInput').value.trim());
+      const s = data.safety;
+      const state = s?.confidence_state || 'UNKNOWN';
+      const colors = {CONFIRMED:'var(--teal)',PROBABLE:'var(--amber)',UNKNOWN:'var(--coral)'};
+      const color = colors[state] || 'var(--t3)';
+      el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r)">
+        <span style="font-family:var(--ff-mono);font-size:11px;color:${color};font-weight:500">${state}</span>
+        <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3)">${(s?.confidence_score*100||0).toFixed(0)}% conf</span>
+        <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3)">${s?.latent_risk||'?'} risk</span>
+        ${data.root_cause ? `<span style="font-family:var(--ff-mono);font-size:10px;color:var(--teal)">root: ${data.root_cause}</span>` : ''}
+        <span style="font-family:var(--ff-mono);font-size:10px;color:var(--t3);margin-left:auto">${data.execution_time_ms?.toFixed(1)||'?'}ms · ${data.data_source||'?'}</span>
+      </div>`;
+    } catch(e) {
+      el.innerHTML = `<div class="error-box">Error: ${e.message}</div>`;
+    }
+  },
+
+  ingestHistory: [],
+
+  async ingestSample() {
+    const body = {
+      node_id: $('ig-node').value.trim() || 'primary',
+      arrival_rate: parseFloat($('ig-arrival').value) || 10,
+      service_rate: parseFloat($('ig-service').value) || 8,
+      queue_length: parseFloat($('ig-queue').value) || 5,
+    };
+    this.clearError('ig-error');
+    try {
+      const r = await fetch(BASE + '/ingest', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const d = await r.json();
+      if (!d.success) { this.showError('ig-error', (d.errors||['Error']).join(', ')); return; }
+      this.addIngestEntry(body, d);
+      pollHealth();
+    } catch(e) {
+      this.showError('ig-error', 'Network error: ' + e.message);
+    }
+  },
+
+  async ingestBatch() {
+    const base = {
+      node_id: $('ig-node').value.trim() || 'primary',
+      arrival_rate: parseFloat($('ig-arrival').value) || 10,
+      service_rate: parseFloat($('ig-service').value) || 8,
+      queue_length: parseFloat($('ig-queue').value) || 5,
+    };
+    for (let i = 0; i < 10; i++) {
+      const noise = (Math.random() - 0.5) * 2;
+      const body = {...base, arrival_rate: base.arrival_rate + noise};
+      try {
+        const r = await fetch(BASE + '/ingest', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        const d = await r.json();
+        if (d.success) this.addIngestEntry(body, d);
+      } catch {}
+      await sleep(50);
+    }
+    pollHealth();
+  },
+
+  addIngestEntry(body, resp) {
+    this.ingestHistory.unshift({body, resp, time: ts()});
+    if (this.ingestHistory.length > 30) this.ingestHistory.pop();
+    this.renderIngestHistory();
+  },
+
+  renderIngestHistory() {
+    const container = $('ingestHistory');
+    const ready = this.ingestHistory.some(e => e.resp.pipeline_ready);
+    const sampleCount = this.ingestHistory[0]?.resp?.sample_count ?? 0;
+
+    const badge = $('pipelineReadyBadge');
+    if (ready) {
+      badge.className = 'pipeline-ready-badge ready';
+      badge.textContent = 'Pipeline Ready';
+    } else {
+      badge.className = 'pipeline-ready-badge not-ready';
+      badge.textContent = 'Not Ready';
+    }
+    $('ingestStatusText').textContent = this.ingestHistory.length
+      ? `${sampleCount} samples stored · ${this.ingestHistory.length} ingests this session`
+      : 'No data ingested yet';
+
+    if (!this.ingestHistory.length) {
+      container.innerHTML = '<div class="empty-state">No samples ingested in this session</div>';
+      return;
+    }
+    container.innerHTML = this.ingestHistory.map(e => {
+      const rho = (e.body.arrival_rate / e.body.service_rate).toFixed(3);
+      const rhoColor = rho > 1 ? 'var(--coral)' : rho > 0.8 ? 'var(--amber)' : 'var(--teal)';
+      return `<div class="ingest-entry">
+        <span class="ingest-entry-node">${e.body.node_id}</span>
+        <span class="ingest-entry-vals">λ=${e.body.arrival_rate.toFixed(1)} μ=${e.body.service_rate.toFixed(1)} Q=${e.body.queue_length}</span>
+        <span class="ingest-entry-rho" style="color:${rhoColor}">ρ=${rho}</span>
+        <span class="ingest-entry-time">${e.time}</span>
+      </div>`;
+    }).join('');
+  },
+};
+</script>
+</body>
+</html>
