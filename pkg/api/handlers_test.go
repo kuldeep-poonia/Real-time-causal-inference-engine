@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"absia/pkg/metricsstore"
 )
 
 func floatPtr(v float64) *float64 {
@@ -151,24 +154,24 @@ func TestAnalyzeHandler_InvalidJSON(t *testing.T) {
 // BUSINESS VALIDATION — ZERO SERVICE RATE VIA HTTP
 // 
 
-func TestAnalyzeHandler_ZeroServiceRateReturns422(t *testing.T) {
+func TestAnalyzeHandler_ZeroServiceRateReturns400(t *testing.T) {
 	body := `{"arrival_rate":10,"service_rate":0,"queue_length":5}`
 	req := httptest.NewRequest(http.MethodPost, "/analyze", bytes.NewBufferString(body))
 	rr := httptest.NewRecorder()
 	AnalyzeHandler(rr, req)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Errorf("service_rate=0 should return 422, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("service_rate=0 should return 400, got %d", rr.Code)
 	}
 	assertErrorResponse(t, rr)
 }
 
-func TestIngestHandler_ZeroServiceRateReturns422(t *testing.T) {
+func TestIngestHandler_ZeroServiceRateReturns400(t *testing.T) {
 	body := `{"arrival_rate":5,"service_rate":0,"queue_length":0}`
 	req := httptest.NewRequest(http.MethodPost, "/ingest", bytes.NewBufferString(body))
 	rr := httptest.NewRecorder()
 	IngestHandler(rr, req)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Errorf("service_rate=0 should return 422, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("service_rate=0 should return 400, got %d", rr.Code)
 	}
 }
 
@@ -177,14 +180,53 @@ func TestIngestHandler_ZeroServiceRateReturns422(t *testing.T) {
 // 
 
 func TestIngestHandler_ValidInput(t *testing.T) {
-	body := `{"arrival_rate":5.0,"service_rate":8.0,"queue_length":2.0}`
+	body := `{"node_id":"api","arrival_rate":5.0,"service_rate":8.0,"queue_length":2.0}`
 	req := httptest.NewRequest(http.MethodPost, "/ingest", bytes.NewBufferString(body))
 	rr := httptest.NewRecorder()
 	IngestHandler(rr, req)
-	if rr.Code != http.StatusAccepted {
-		t.Errorf("valid ingest should return 202, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Errorf("valid ingest should return 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	assertContentTypeJSON(t, rr)
+}
+
+func TestNodesHandler_ReturnsStoreInventory(t *testing.T) {
+	store := metricsstore.New(10)
+	store.Put("api", metricsstore.NodeSample{
+		ArrivalRate: 50,
+		ServiceRate: 100,
+		QueueLength: 4,
+		Timestamp:   float64(time.Now().Unix()),
+		WallTime:    time.Now(),
+	})
+	SetStore(store)
+	t.Cleanup(func() { SetStore(nil) })
+
+	req := httptest.NewRequest(http.MethodGet, "/nodes", nil)
+	rr := httptest.NewRecorder()
+	NodesHandler(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("nodes should return 200, got %d", rr.Code)
+	}
+	assertContentTypeJSON(t, rr)
+
+	var resp NodesResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("cannot decode nodes response: %v", err)
+	}
+	if !resp.Success {
+		t.Error("nodes response should have success=true")
+	}
+	if resp.NodeCount != 1 || len(resp.Nodes) != 1 {
+		t.Fatalf("expected one node, got count=%d len=%d", resp.NodeCount, len(resp.Nodes))
+	}
+	if resp.Nodes[0].NodeID != "api" {
+		t.Errorf("expected api node, got %q", resp.Nodes[0].NodeID)
+	}
+	if resp.Nodes[0].Load != 0.5 {
+		t.Errorf("expected load=0.5, got %f", resp.Nodes[0].Load)
+	}
 }
 
 // 

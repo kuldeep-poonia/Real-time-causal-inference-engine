@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"absia/pkg/logger"
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -274,7 +276,17 @@ type AnalysisResponse struct {
 	PatternsCount   int                `json:"patterns_detected"`
 	Summary         string             `json:"summary,omitempty"`
 	ExecutionTimeMS float64            `json:"execution_time_ms"`
-	Safety          SafetyGate         `json:"safety"`
+
+	// Top-level safety fields — required by the API contract for every
+	// analysis response. These are the primary safety surface that clients
+	// and automated consumers check before acting on results.
+	ConfidenceScore   float64 `json:"confidence_score"`
+	ConfidenceState   string  `json:"confidence_state"`
+	LatentRisk        string  `json:"latent_risk"`
+	FallbackTriggered bool    `json:"fallback_triggered"`
+
+	// Detailed safety gate metadata (superset of the top-level fields).
+	Safety SafetyGate `json:"safety"`
 }
 
 type ExplainResponse struct {
@@ -285,7 +297,13 @@ type ExplainResponse struct {
 	Effects         map[string]float64 `json:"effects,omitempty"`
 	Uncertainty     map[string]float64 `json:"uncertainty,omitempty"`
 	ExecutionTimeMS float64            `json:"execution_time_ms"`
-	Safety          SafetyGate         `json:"safety"`
+
+	ConfidenceScore   float64 `json:"confidence_score"`
+	ConfidenceState   string  `json:"confidence_state"`
+	LatentRisk        string  `json:"latent_risk"`
+	FallbackTriggered bool    `json:"fallback_triggered"`
+
+	Safety SafetyGate `json:"safety"`
 }
 
 type ActResponse struct {
@@ -294,7 +312,13 @@ type ActResponse struct {
 	Actions         []map[string]interface{} `json:"recommended_actions"`
 	PolicyTrained   bool                     `json:"policy_trained"`
 	ExecutionTimeMS float64                  `json:"execution_time_ms"`
-	Safety          SafetyGate               `json:"safety"`
+
+	ConfidenceScore   float64 `json:"confidence_score"`
+	ConfidenceState   string  `json:"confidence_state"`
+	LatentRisk        string  `json:"latent_risk"`
+	FallbackTriggered bool    `json:"fallback_triggered"`
+
+	Safety SafetyGate `json:"safety"`
 }
 
 type HealthResponse struct {
@@ -304,6 +328,25 @@ type HealthResponse struct {
 	RealData  bool   `json:"real_data_available"`
 	NodeCount int    `json:"ingested_node_count"`
 	AuthMode  string `json:"auth_mode"`
+}
+
+type NodeSnapshot struct {
+	NodeID        string  `json:"node_id"`
+	ArrivalRate   float64 `json:"arrival_rate"`
+	ServiceRate   float64 `json:"service_rate"`
+	QueueLength   float64 `json:"queue_length"`
+	Load          float64 `json:"load"`
+	SampleCount   int     `json:"sample_count"`
+	PipelineReady bool    `json:"pipeline_ready"`
+	Status        string  `json:"status"`
+	LastSeen      string  `json:"last_seen,omitempty"`
+}
+
+type NodesResponse struct {
+	Success           bool           `json:"success"`
+	RealDataAvailable bool           `json:"real_data_available"`
+	NodeCount         int            `json:"node_count"`
+	Nodes             []NodeSnapshot `json:"nodes"`
 }
 
 // ============================================================================
@@ -339,7 +382,7 @@ func decodeAndValidate(w http.ResponseWriter, r *http.Request) (MetricsRequest, 
 		return req, false
 	}
 	if errs := req.validate(); len(errs) > 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{Success: false, Errors: errs})
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Success: false, Errors: errs})
 		return req, false
 	}
 	return req, true
@@ -388,11 +431,11 @@ func runPipeline(w http.ResponseWriter, req MetricsRequest) (*orchestrator.Pipel
 	// 🔥 REAL MODE (store se run karo)
 	if globalStore != nil && globalStore.HasRealData() {
 		result, err := orchestrator.ExecuteFullPipelineFromStore(
-    *req.ArrivalRate,
-    *req.ServiceRate,
-    *req.QueueLength,
-    globalStore,
-)
+			*req.ArrivalRate,
+			*req.ServiceRate,
+			*req.QueueLength,
+			globalStore,
+		)
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
 				Success: false, Errors: []string{err.Error()},
@@ -451,7 +494,11 @@ func buildSafetyGate(sr *orchestrator.SafetyResult) SafetyGate {
 // ============================================================================
 
 // HealthHandler reports liveness, real-data availability, node count, and auth mode.
+// Only GET is accepted; all other methods receive 405.
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
 	nodeCount := 0
 	realData := false
 	if globalStore != nil {
@@ -468,6 +515,65 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// NodesHandler returns the current metrics-store inventory for the UI control plane.
+func NodesHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	resp := NodesResponse{Success: true, Nodes: []NodeSnapshot{}}
+	if globalStore == nil {
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	ids := globalStore.GetAllNodeIDs()
+	resp.NodeCount = len(ids)
+	resp.RealDataAvailable = globalStore.HasRealData()
+
+	for _, id := range ids {
+		sample, ok := globalStore.GetLatestSample(id)
+		if !ok {
+			continue
+		}
+		load := 0.0
+		if sample.ServiceRate > 0 {
+			load = sample.ArrivalRate / sample.ServiceRate
+		}
+		status := "healthy"
+		switch {
+		case sample.ServiceRate <= 0 || load >= 1.05:
+			status = "overloaded"
+		case load >= 0.85:
+			status = "pressure"
+		case load >= 0.60:
+			status = "watch"
+		}
+
+		lastSeen := ""
+		if !sample.WallTime.IsZero() {
+			lastSeen = sample.WallTime.UTC().Format(time.RFC3339)
+		} else if sample.Timestamp > 0 {
+			lastSeen = time.Unix(int64(sample.Timestamp), 0).UTC().Format(time.RFC3339)
+		}
+
+		count := globalStore.SampleCount(id)
+		resp.Nodes = append(resp.Nodes, NodeSnapshot{
+			NodeID:        id,
+			ArrivalRate:   sample.ArrivalRate,
+			ServiceRate:   sample.ServiceRate,
+			QueueLength:   sample.QueueLength,
+			Load:          load,
+			SampleCount:   count,
+			PipelineReady: count >= 4,
+			Status:        status,
+			LastSeen:      lastSeen,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // IngestHandler persists metrics into the metricsstore.
 // Successive calls accumulate a time series per node_id.
 // Once a node has >= 4 samples the pipeline will use real data.
@@ -478,6 +584,33 @@ func IngestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	req, ok := decodeAndValidate(w, r)
 	if !ok {
+		return
+	}
+
+	// Validate required fields for ingest: node_id must be explicitly provided,
+	// and all three metric fields must be non-nil.
+	if req.NodeID == nil || *req.NodeID == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Success: false,
+			Errors:  []string{"node_id is required for ingest"},
+		})
+		return
+	}
+	if req.ArrivalRate == nil || req.ServiceRate == nil || req.QueueLength == nil {
+		var missing []string
+		if req.ArrivalRate == nil {
+			missing = append(missing, "arrival_rate")
+		}
+		if req.ServiceRate == nil {
+			missing = append(missing, "service_rate")
+		}
+		if req.QueueLength == nil {
+			missing = append(missing, "queue_length")
+		}
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Success: false,
+			Errors:  []string{fmt.Sprintf("missing required fields: %s", strings.Join(missing, ", "))},
+		})
 		return
 	}
 
@@ -506,7 +639,7 @@ func IngestHandler(w http.ResponseWriter, r *http.Request) {
 		sampleCount = globalStore.SampleCount(nodeID)
 	}
 
-	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":        true,
 		"status":         "stored",
 		"node_id":        nodeID,
@@ -520,8 +653,6 @@ func IngestHandler(w http.ResponseWriter, r *http.Request) {
 // safety gate, backdoor effects, and physics root cause.
 func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 
-
-	
 	log := logger.FromCtx(r.Context())
 	if !requireMethod(w, r, http.MethodPost) {
 		return
@@ -537,41 +668,46 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		if globalStore != nil {
 			if _, ok := globalStore.GetLatestSample(nodeID); ok {
 				// अगर request empty है → force real pipeline
-if req.ArrivalRate == nil && req.ServiceRate == nil && req.QueueLength == nil {
-    // store se latest sample uthao
-    nodeID := req.nodeID()
+				if req.ArrivalRate == nil && req.ServiceRate == nil && req.QueueLength == nil {
+					// store se latest sample uthao
+					nodeID := req.nodeID()
 
-    latest, ok := globalStore.GetLatestSample(nodeID)
-    if !ok {
-        writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-            Success: false,
-            Errors:  []string{"no real data available in store"},
-        })
-        return
-    }
+					latest, ok := globalStore.GetLatestSample(nodeID)
+					if !ok {
+						writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
+							Success: false,
+							Errors:  []string{"no real data available in store"},
+						})
+						return
+					}
 
-    result, err := orchestrator.ExecuteFullPipelineFromStore(
-        latest.ArrivalRate,
-        latest.ServiceRate,
-        latest.QueueLength,
-        globalStore,
-    )
-    if err != nil {
-        writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-            Success: false, Errors: []string{err.Error()},
-        })
-        return
-    }
+					result, err := orchestrator.ExecuteFullPipelineFromStore(
+						latest.ArrivalRate,
+						latest.ServiceRate,
+						latest.QueueLength,
+						globalStore,
+					)
+					if err != nil {
+						writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
+							Success: false, Errors: []string{err.Error()},
+						})
+						return
+					}
 
-    writeJSON(w, http.StatusOK, AnalysisResponse{
-        Success:         true,
-        DataSource:      result.DataSource,
-        Summary:         result.Summary(),
-        ExecutionTimeMS: result.ExecutionTimeMS,
-        Safety:          buildSafetyGate(result.SafetyResult),
-    })
-    return
-}
+					sg := buildSafetyGate(result.SafetyResult)
+					writeJSON(w, http.StatusOK, AnalysisResponse{
+						Success:           true,
+						DataSource:        result.DataSource,
+						Summary:           result.Summary(),
+						ExecutionTimeMS:   result.ExecutionTimeMS,
+						ConfidenceScore:   sg.ConfidenceScore,
+						ConfidenceState:   sg.ConfidenceState,
+						LatentRisk:        sg.LatentRisk,
+						FallbackTriggered: sg.FallbackTriggered,
+						Safety:            sg,
+					})
+					return
+				}
 			}
 		}
 		// Fallback to synthetic defaults if still missing
@@ -601,14 +737,19 @@ if req.ArrivalRate == nil && req.ServiceRate == nil && req.QueueLength == nil {
 		return
 	}
 
+	sg := buildSafetyGate(result.SafetyResult)
 	resp := AnalysisResponse{
-		Success:         true,
-		DataSource:      result.DataSource,
-		ActionsCount:    len(result.Phase5Actions),
-		PatternsCount:   len(result.Phase2Patterns),
-		Summary:         result.Summary(),
-		ExecutionTimeMS: result.ExecutionTimeMS,
-		Safety:          buildSafetyGate(result.SafetyResult),
+		Success:           true,
+		DataSource:        result.DataSource,
+		ActionsCount:      len(result.Phase5Actions),
+		PatternsCount:     len(result.Phase2Patterns),
+		Summary:           result.Summary(),
+		ExecutionTimeMS:   result.ExecutionTimeMS,
+		ConfidenceScore:   sg.ConfidenceScore,
+		ConfidenceState:   sg.ConfidenceState,
+		LatentRisk:        sg.LatentRisk,
+		FallbackTriggered: sg.FallbackTriggered,
+		Safety:            sg,
 	}
 
 	if result.Phase3Result != nil {
@@ -652,11 +793,16 @@ func ExplainHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sg := buildSafetyGate(result.SafetyResult)
 	resp := ExplainResponse{
-		Success:         true,
-		DataSource:      result.DataSource,
-		ExecutionTimeMS: result.ExecutionTimeMS,
-		Safety:          buildSafetyGate(result.SafetyResult),
+		Success:           true,
+		DataSource:        result.DataSource,
+		ExecutionTimeMS:   result.ExecutionTimeMS,
+		ConfidenceScore:   sg.ConfidenceScore,
+		ConfidenceState:   sg.ConfidenceState,
+		LatentRisk:        sg.LatentRisk,
+		FallbackTriggered: sg.FallbackTriggered,
+		Safety:            sg,
 	}
 
 	if result.Phase3Result != nil {
@@ -734,12 +880,16 @@ func ActHandler(w http.ResponseWriter, r *http.Request) {
 		slog.Float64("execution_time_ms", result.ExecutionTimeMS),
 	)
 	writeJSON(w, http.StatusOK, ActResponse{
-		Success:         true,
-		DataSource:      result.DataSource,
-		Actions:         actions,
-		PolicyTrained:   result.Phase5Policy != nil,
-		ExecutionTimeMS: result.ExecutionTimeMS,
-		Safety:          safety,
+		Success:           true,
+		DataSource:        result.DataSource,
+		Actions:           actions,
+		PolicyTrained:     result.Phase5Policy != nil,
+		ExecutionTimeMS:   result.ExecutionTimeMS,
+		ConfidenceScore:   safety.ConfidenceScore,
+		ConfidenceState:   safety.ConfidenceState,
+		LatentRisk:        safety.LatentRisk,
+		FallbackTriggered: safety.FallbackTriggered,
+		Safety:            safety,
 	})
 }
 
@@ -796,6 +946,9 @@ func selectPolicyActions(result *orchestrator.PipelineResult) []map[string]inter
 	return out
 }
 
+//go:embed ui/absia.html
+var embeddedUIFS embed.FS
+
 func toPhase5Exp(e *phase4.Explanation) phase5.Explanation {
 	if e == nil {
 		return phase5.Explanation{
@@ -809,6 +962,26 @@ func toPhase5Exp(e *phase4.Explanation) phase5.Explanation {
 		Effects:     e.Effects,
 		Uncertainty: e.Uncertainty,
 	}
+}
+
+func UIHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		data, err := embeddedUIFS.ReadFile("ui/absia.html")
+		if err != nil {
+			baseLog().Error("failed to read embedded UI asset", slog.Any("error", err))
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		if _, err := w.Write(data); err != nil {
+			baseLog().Error("failed to write UI response", slog.Any("error", err))
+		}
+	})
 }
 
 // ============================================================================
@@ -837,6 +1010,7 @@ func SetupRoutes(base *slog.Logger) {
 	}
 
 	http.Handle("/health", chain(HealthHandler))
+	http.Handle("/nodes", chain(NodesHandler))
 	http.Handle("/ingest", chainRL(IngestHandler))
 
 	http.Handle("/metrics", promhttp.Handler())

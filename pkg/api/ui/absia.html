@@ -1,0 +1,1580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABSIA Control Plane</title>
+<style>
+:root {
+  --bg: #0b0d10;
+  --rail: #0f1318;
+  --surface: #131820;
+  --panel: #171d25;
+  --panel-2: #1d242d;
+  --panel-3: #222a34;
+  --border: #2a3440;
+  --border-soft: rgba(255, 255, 255, 0.07);
+  --text: #f0f4f8;
+  --muted: #9aa7b5;
+  --dim: #657383;
+  --ok: #32d6a6;
+  --ok-soft: rgba(50, 214, 166, 0.13);
+  --ok-border: rgba(50, 214, 166, 0.35);
+  --warn: #f4b85f;
+  --warn-soft: rgba(244, 184, 95, 0.14);
+  --warn-border: rgba(244, 184, 95, 0.34);
+  --bad: #ff6b6b;
+  --bad-soft: rgba(255, 107, 107, 0.14);
+  --bad-border: rgba(255, 107, 107, 0.36);
+  --info: #69b7ff;
+  --info-soft: rgba(105, 183, 255, 0.13);
+  --info-border: rgba(105, 183, 255, 0.32);
+  --violet: #b28cff;
+  --violet-soft: rgba(178, 140, 255, 0.12);
+  --shadow: 0 16px 50px rgba(0, 0, 0, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(105, 183, 255, 0.06), transparent 320px),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27323d;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: rgba(15, 19, 24, 0.92);
+  border-right: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 10px;
+  gap: 16px;
+}
+
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--ok), var(--info) 58%, var(--violet));
+  color: #07100d;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  box-shadow: 0 12px 32px rgba(50, 214, 166, 0.2);
+}
+
+.rail-link {
+  width: 42px;
+  height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--dim);
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.rail-link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border);
+}
+
+.main {
+  min-width: 0;
+  padding: 22px;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 38px);
+  line-height: 1.05;
+  font-weight: 760;
+}
+
+.subtitle {
+  margin-top: 9px;
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.chip.ok {
+  color: var(--ok);
+  border-color: var(--ok-border);
+  background: var(--ok-soft);
+}
+
+.chip.warn {
+  color: var(--warn);
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+
+.chip.bad {
+  color: var(--bad);
+  border-color: var(--bad-border);
+  background: var(--bad-soft);
+}
+
+.chip.info {
+  color: var(--info);
+  border-color: var(--info-border);
+  background: var(--info-soft);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.live .dot {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.btn,
+.icon-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 8px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 120ms ease, border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.btn {
+  padding: 8px 13px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  width: 38px;
+  padding: 0;
+}
+
+.btn:hover,
+.icon-btn:hover {
+  border-color: #405060;
+  background: #242d38;
+}
+
+.btn:active,
+.icon-btn:active {
+  transform: translateY(1px);
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--ok), #5ce0bf);
+  color: #061410;
+  border-color: transparent;
+}
+
+.btn.primary:hover {
+  background: linear-gradient(135deg, #45e0b2, #8be9d0);
+}
+
+.btn.ghost {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+}
+
+.btn.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: var(--warn-border);
+}
+
+.btn:disabled {
+  opacity: 0.48;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.grid-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.kpi {
+  min-height: 112px;
+  background: rgba(23, 29, 37, 0.86);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  animation: enter 250ms ease both;
+}
+
+.kpi-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+.kpi-value {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 780;
+  overflow-wrap: anywhere;
+}
+
+.kpi-foot {
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 12px;
+  min-height: 17px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(460px, 1.55fr) minmax(320px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.panel {
+  background: rgba(23, 29, 37, 0.9);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.panel-head {
+  min-height: 54px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 760;
+}
+
+.panel-body {
+  padding: 16px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.input,
+.select {
+  width: 100%;
+  min-height: 40px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: 0;
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--info);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.command-buttons {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+.phase-list {
+  display: grid;
+  gap: 8px;
+}
+
+.phase {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+}
+
+.phase-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.phase.active {
+  color: var(--text);
+  border-color: var(--info-border);
+  background: var(--info-soft);
+}
+
+.phase.active .phase-num {
+  color: var(--info);
+  border-color: var(--info-border);
+}
+
+.phase.done {
+  color: var(--text);
+  background: var(--ok-soft);
+  border-color: var(--ok-border);
+}
+
+.phase.done .phase-num {
+  color: var(--ok);
+  border-color: var(--ok-border);
+}
+
+.node-map {
+  min-height: 390px;
+}
+
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  gap: 10px;
+}
+
+.node-card {
+  position: relative;
+  min-height: 150px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 13px;
+  text-align: left;
+  color: inherit;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.node-card:hover {
+  transform: translateY(-2px);
+  border-color: #405060;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.node-card.selected {
+  border-color: var(--info);
+  box-shadow: inset 0 0 0 1px rgba(105, 183, 255, 0.24);
+}
+
+.node-name {
+  font-weight: 760;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  padding-right: 28px;
+}
+
+.node-id {
+  color: var(--dim);
+  font-size: 12px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.node-load {
+  margin: 14px 0 10px;
+}
+
+.bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--ok);
+  transition: width 350ms ease;
+}
+
+.bar.ok > span { background: var(--ok); }
+.bar.info > span { background: var(--info); }
+.bar.watch > span { background: var(--info); }
+.bar.pressure > span { background: var(--warn); }
+.bar.overloaded > span { background: var(--bad); }
+
+.node-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 12px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.state-pill.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+.state-pill.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.state-pill.bad { color: var(--bad); border-color: var(--bad-border); background: var(--bad-soft); }
+.state-pill.info { color: var(--info); border-color: var(--info-border); background: var(--info-soft); }
+.state-pill.watch { color: var(--info); border-color: var(--info-border); background: var(--info-soft); }
+.state-pill.pressure { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.state-pill.overloaded { color: var(--bad); border-color: var(--bad-border); background: var(--bad-soft); }
+
+.empty {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  padding: 28px;
+}
+
+.empty h2 {
+  color: var(--text);
+  margin: 10px 0 6px;
+  font-size: 19px;
+}
+
+.empty p {
+  max-width: 420px;
+  margin: 0 auto 18px;
+  line-height: 1.65;
+}
+
+.result-hero {
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  padding: 14px;
+}
+
+.result-title {
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 800;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+
+.result-copy {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mini-stat {
+  padding: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.mini-stat .label {
+  color: var(--dim);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.mini-stat .value {
+  font-size: 18px;
+  font-weight: 780;
+  overflow-wrap: anywhere;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 9px;
+}
+
+.evidence-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) 96px;
+  gap: 10px;
+  align-items: center;
+}
+
+.evidence-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-score {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.notice {
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  border-radius: 8px;
+  line-height: 1.55;
+}
+
+.notice.bad {
+  color: var(--bad);
+  border-color: var(--bad-border);
+  background: var(--bad-soft);
+}
+
+.notice.warn {
+  color: var(--warn);
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+
+.table-panel {
+  margin-top: 14px;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+td {
+  color: var(--text);
+  vertical-align: middle;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.dim {
+  color: var(--dim);
+}
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: spin 720ms linear infinite;
+}
+
+.history {
+  display: grid;
+  gap: 8px;
+}
+
+.history-row {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.history-row strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+  }
+  .insight {
+    grid-column: 1 / -1;
+  }
+  .grid-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 10px 12px;
+  }
+  .rail-link {
+    width: 38px;
+    height: 38px;
+  }
+  .main {
+    padding: 14px;
+  }
+  .topbar {
+    flex-direction: column;
+  }
+  .top-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .grid-kpis,
+  .workspace,
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+  .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .btn {
+    width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function () {
+  "use strict";
+
+  var state = {
+    health: null,
+    nodes: [],
+    selected: "",
+    analysis: null,
+    explanation: null,
+    actions: null,
+    error: "",
+    busy: "",
+    phase: -1,
+    lastUpdated: null,
+    apiKey: localStorage.getItem("absia_api_key") || "",
+    history: readJSON("absia_control_history", [])
+  };
+
+  var phaseTimer = null;
+  var refreshTimer = null;
+
+  var phases = [
+    "Signal physics",
+    "Pattern intelligence",
+    "Causal graph",
+    "Explanation",
+    "Policy and safety"
+  ];
+
+  var demoNodes = [
+    { id: "edge-gateway", arrival: 148, service: 178, queue: 10 },
+    { id: "auth-service", arrival: 84, service: 126, queue: 5 },
+    { id: "orders-api", arrival: 218, service: 234, queue: 19 },
+    { id: "redis-cache", arrival: 72, service: 150, queue: 2 },
+    { id: "primary-database", arrival: 188, service: 142, queue: 58 }
+  ];
+
+  var icons = {
+    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2"></path><path d="M3 17v5h5"></path><path d="M3 12A9 9 0 0 1 18.5 5.8"></path><path d="M21 7V2h-5"></path>',
+    play: '<polygon points="8 5 19 12 8 19 8 5"></polygon>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
+    target: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle>',
+    database: '<ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>',
+    key: '<circle cx="7.5" cy="15.5" r="5.5"></circle><path d="M12 11l9-9"></path><path d="M17 6l2 2"></path>',
+    alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path>',
+    check: '<path d="M20 6 9 17l-5-5"></path>',
+    bolt: '<path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"></path>',
+    graph: '<circle cx="6" cy="7" r="3"></circle><circle cx="18" cy="7" r="3"></circle><circle cx="12" cy="18" r="3"></circle><path d="M8.8 8.5 10.7 15"></path><path d="M15.2 8.5 13.3 15"></path><path d="M9 7h6"></path>',
+    spark: '<path d="M12 2v6"></path><path d="M12 16v6"></path><path d="M4.9 4.9l4.2 4.2"></path><path d="M14.9 14.9l4.2 4.2"></path><path d="M2 12h6"></path><path d="M16 12h6"></path><path d="M4.9 19.1l4.2-4.2"></path><path d="M14.9 9.1l4.2-4.2"></path>'
+  };
+
+  function icon(name) {
+    return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + (icons[name] || icons.activity) + '</svg>';
+  }
+
+  function readJSON(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function writeJSON(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function escapeHTML(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function fmt(value, digits) {
+    if (value == null || value === "" || !isFinite(value)) return "-";
+    return Number(value).toLocaleString(undefined, {
+      maximumFractionDigits: digits == null ? 1 : digits
+    });
+  }
+
+  function pct(value) {
+    if (value == null || !isFinite(value)) return "0%";
+    return Math.round(value * 100) + "%";
+  }
+
+  function statusForNode(node) {
+    var status = node && node.status ? node.status : "healthy";
+    if (status === "healthy") return { key: "ok", label: "Healthy", score: 0 };
+    if (status === "watch") return { key: "watch", label: "Watch", score: 1 };
+    if (status === "pressure") return { key: "pressure", label: "Pressure", score: 2 };
+    return { key: "overloaded", label: "Overloaded", score: 3 };
+  }
+
+  function safetyMeta(safety) {
+    var stateName = (safety && safety.confidence_state) || (state.analysis && state.analysis.confidence_state) || "UNKNOWN";
+    if (stateName === "CONFIRMED") return { key: "ok", label: "Confirmed" };
+    if (stateName === "PROBABLE") return { key: "warn", label: "Probable" };
+    return { key: "bad", label: "Unknown" };
+  }
+
+  function nameFor(id) {
+    var value = String(id || "primary");
+    var lower = value.toLowerCase();
+    if (/db|database|postgres|mysql|mongo/.test(lower)) return "Database";
+    if (/auth|identity|login|session/.test(lower)) return "Auth service";
+    if (/gateway|edge|ingress|proxy|lb/.test(lower)) return "Gateway";
+    if (/cache|redis|memcache/.test(lower)) return "Cache";
+    if (/queue|kafka|rabbit|worker|job/.test(lower)) return "Queue worker";
+    return value.replace(/[-_]+/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  function relativeTime(iso) {
+    if (!iso) return "-";
+    var ms = Date.now() - new Date(iso).getTime();
+    if (!isFinite(ms)) return "-";
+    var seconds = Math.max(0, Math.round(ms / 1000));
+    if (seconds < 60) return "just now";
+    if (seconds < 3600) return Math.round(seconds / 60) + " min ago";
+    if (seconds < 86400) return Math.round(seconds / 3600) + " hr ago";
+    return Math.round(seconds / 86400) + " d ago";
+  }
+
+  function apiGet(path) {
+    return fetch(path, { headers: { "Accept": "application/json" } })
+      .then(function (res) { return res.json().then(function (json) { json.__status = res.status; return json; }); });
+  }
+
+  function apiPost(path, body, token) {
+    var headers = { "Content-Type": "application/json", "Accept": "application/json" };
+    if (token) headers.Authorization = "Bearer " + token;
+    return fetch(path, { method: "POST", headers: headers, body: JSON.stringify(body) })
+      .then(function (res) { return res.json().then(function (json) { json.__status = res.status; return json; }); });
+  }
+
+  function sortedNodes() {
+    return state.nodes.slice().sort(function (a, b) {
+      var sa = statusForNode(a).score;
+      var sb = statusForNode(b).score;
+      if (sb !== sa) return sb - sa;
+      return (b.load || 0) - (a.load || 0);
+    });
+  }
+
+  function selectedNode() {
+    return state.nodes.find(function (node) { return node.node_id === state.selected; }) || null;
+  }
+
+  function bestDefaultNode(nodes) {
+    if (!nodes.length) return "";
+    return nodes.slice().sort(function (a, b) {
+      var sa = statusForNode(a).score;
+      var sb = statusForNode(b).score;
+      if (sb !== sa) return sb - sa;
+      return (b.load || 0) - (a.load || 0);
+    })[0].node_id;
+  }
+
+  function bodyForSelection() {
+    var node = selectedNode();
+    if (!node) {
+      return { arrival_rate: 96, service_rate: 72, queue_length: 24 };
+    }
+    return {
+      node_id: node.node_id,
+      arrival_rate: node.arrival_rate,
+      service_rate: node.service_rate > 0 ? node.service_rate : 1,
+      queue_length: node.queue_length
+    };
+  }
+
+  function startBusy(mode) {
+    stopBusy(false);
+    state.busy = mode;
+    state.error = "";
+    state.phase = 0;
+    var i = 0;
+    phaseTimer = setInterval(function () {
+      i = Math.min(i + 1, phases.length - 1);
+      state.phase = i;
+      render();
+    }, 520);
+    render();
+  }
+
+  function stopBusy(shouldRender) {
+    if (phaseTimer) clearInterval(phaseTimer);
+    phaseTimer = null;
+    state.busy = "";
+    state.phase = -1;
+    if (shouldRender) render();
+  }
+
+  function remember(result, kind) {
+    var safety = result.safety || result;
+    var item = {
+      time: new Date().toISOString(),
+      kind: kind,
+      root: result.root_cause || result.physics_root_cause || (selectedNode() && selectedNode().node_id) || "unknown",
+      state: safety.confidence_state || result.confidence_state || "UNKNOWN",
+      score: safety.confidence_score || result.confidence_score || 0,
+      data: result.data_source || "unknown"
+    };
+    state.history = [item].concat(state.history).slice(0, 8);
+    writeJSON("absia_control_history", state.history);
+  }
+
+  async function refresh() {
+    try {
+      var results = await Promise.all([apiGet("/health"), apiGet("/nodes")]);
+      state.health = results[0] && !results[0].errors ? results[0] : null;
+      state.nodes = results[1] && Array.isArray(results[1].nodes) ? results[1].nodes : [];
+      if (!state.selected || !state.nodes.some(function (node) { return node.node_id === state.selected; })) {
+        state.selected = bestDefaultNode(state.nodes);
+      }
+      state.lastUpdated = new Date();
+      render();
+    } catch (err) {
+      state.error = "The ABSIA API is not reachable from this page.";
+      render();
+    }
+  }
+
+  async function runAnalyze() {
+    startBusy("analysis");
+    try {
+      var result = await apiPost("/analyze", bodyForSelection());
+      stopBusy(false);
+      if (result.success === false || result.errors) {
+        state.error = (result.errors && result.errors[0]) || "Analysis failed.";
+      } else {
+        state.analysis = result;
+        state.explanation = null;
+        state.actions = null;
+        remember(result, "analysis");
+      }
+      render();
+    } catch (err) {
+      stopBusy(false);
+      state.error = "Analysis request failed.";
+      render();
+    }
+  }
+
+  async function runExplain() {
+    startBusy("explain");
+    try {
+      var result = await apiPost("/explain", bodyForSelection());
+      stopBusy(false);
+      if (result.success === false || result.errors) {
+        state.error = (result.errors && result.errors[0]) || "Explanation failed.";
+      } else {
+        state.explanation = result;
+        state.actions = null;
+        remember(result, "explain");
+      }
+      render();
+    } catch (err) {
+      stopBusy(false);
+      state.error = "Explanation request failed.";
+      render();
+    }
+  }
+
+  async function runAct() {
+    startBusy("act");
+    try {
+      var result = await apiPost("/act", bodyForSelection(), state.apiKey);
+      stopBusy(false);
+      state.actions = result;
+      if (result.success === false && result.errors) {
+        state.error = result.errors[0];
+      } else {
+        state.error = "";
+      }
+      remember(result, "action");
+      render();
+    } catch (err) {
+      stopBusy(false);
+      state.error = "Action request failed.";
+      render();
+    }
+  }
+
+  async function seedDemo() {
+    startBusy("demo");
+    try {
+      for (var i = 0; i < 4; i++) {
+        for (var j = 0; j < demoNodes.length; j++) {
+          var n = demoNodes[j];
+          await apiPost("/ingest", {
+            node_id: n.id,
+            arrival_rate: n.arrival + i * (j % 2 === 0 ? 4 : -2),
+            service_rate: n.service,
+            queue_length: n.queue + i * (j === 4 ? 7 : 1)
+          });
+        }
+      }
+      stopBusy(false);
+      await refresh();
+    } catch (err) {
+      stopBusy(false);
+      state.error = "Could not seed the demo metric stream.";
+      render();
+    }
+  }
+
+  function render() {
+    document.getElementById("app").innerHTML = [
+      '<div class="app">',
+      renderRail(),
+      '<main class="main">',
+      renderTopbar(),
+      renderKpis(),
+      '<div class="workspace">',
+      renderCommandPanel(),
+      renderNodeMap(),
+      renderInsightPanel(),
+      '</div>',
+      renderInventory(),
+      '</main>',
+      '</div>'
+    ].join("");
+    bindEvents();
+  }
+
+  function renderRail() {
+    return [
+      '<aside class="rail">',
+      '<div class="brand-mark" title="ABSIA">A</div>',
+      '<a class="rail-link" href="#command" title="Command">' + icon("target") + '</a>',
+      '<a class="rail-link" href="#map" title="Causal map">' + icon("graph") + '</a>',
+      '<a class="rail-link" href="#nodes" title="Node inventory">' + icon("database") + '</a>',
+      '<a class="rail-link" href="#insight" title="Safety">' + icon("shield") + '</a>',
+      '</aside>'
+    ].join("");
+  }
+
+  function renderTopbar() {
+    var online = state.health && state.health.status === "ok";
+    var real = state.health && state.health.real_data_available;
+    var last = state.lastUpdated ? state.lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-";
+    return [
+      '<section class="topbar">',
+      '<div>',
+      '<div class="eyebrow">Adaptive Bayes-Structural Inference and Action</div>',
+      '<h1>ABSIA Causal Control Plane</h1>',
+      '<div class="subtitle">Live node inventory, causal root-cause analysis, Pearl-style effect evidence, RL-ranked interventions, and an explicit safety gate in one operator surface.</div>',
+      '</div>',
+      '<div class="top-actions">',
+      '<span class="chip ' + (online ? "ok live" : "bad") + '"><span class="dot"></span>' + (online ? "API online" : "API offline") + '</span>',
+      '<span class="chip ' + (real ? "ok" : "warn") + '">' + (real ? "Real data" : "Synthetic fallback") + '</span>',
+      '<span class="chip info">' + escapeHTML(last) + '</span>',
+      '<button class="icon-btn" data-action="refresh" title="Refresh">' + icon("refresh") + '</button>',
+      '</div>',
+      '</section>'
+    ].join("");
+  }
+
+  function renderKpis() {
+    var nodes = state.nodes.length;
+    var hot = state.nodes.filter(function (n) { return statusForNode(n).score >= 2; }).length;
+    var ready = state.nodes.filter(function (n) { return n.pipeline_ready; }).length;
+    var meta = safetyMeta(state.analysis && state.analysis.safety);
+    var root = state.analysis && (state.analysis.root_cause || state.analysis.physics_root_cause);
+    return [
+      '<section class="grid-kpis">',
+      kpi("Observed nodes", nodes || "-", ready + " pipeline-ready"),
+      kpi("Hot nodes", hot, hot ? "pressure or overload" : "no pressure detected", hot ? "warn" : "ok"),
+      kpi("Safety gate", meta.label, state.analysis ? pct((state.analysis.safety || state.analysis).confidence_score || 0) + " confidence" : "waiting for analysis", meta.key),
+      kpi("Root cause", root ? nameFor(root) : "-", root ? root : "not evaluated", root ? "info" : ""),
+      '</section>'
+    ].join("");
+  }
+
+  function kpi(label, value, foot, color) {
+    return [
+      '<div class="kpi">',
+      '<div class="kpi-label"><span>' + escapeHTML(label) + '</span>' + (color ? '<span class="state-pill ' + color + '">' + escapeHTML(color === "ok" ? "clear" : color) + '</span>' : '') + '</div>',
+      '<div class="kpi-value">' + escapeHTML(value) + '</div>',
+      '<div class="kpi-foot">' + escapeHTML(foot || "") + '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderCommandPanel() {
+    var node = selectedNode();
+    var options = state.nodes.map(function (n) {
+      return '<option value="' + escapeHTML(n.node_id) + '"' + (n.node_id === state.selected ? " selected" : "") + '>' + escapeHTML(nameFor(n.node_id)) + ' - ' + escapeHTML(n.node_id) + '</option>';
+    }).join("");
+    var selectedCopy = node
+      ? 'Load ' + pct(node.load || 0) + ', queue ' + fmt(node.queue_length, 0) + ', samples ' + fmt(node.sample_count, 0)
+      : 'No live node selected. Synthetic fallback can still run.';
+    return [
+      '<section class="panel" id="command">',
+      '<div class="panel-head"><div class="panel-title">' + icon("target") + '<span>Command</span></div></div>',
+      '<div class="panel-body stack">',
+      '<div class="field">',
+      '<label for="nodeSelect">Focus node</label>',
+      '<select class="select" id="nodeSelect" ' + (state.nodes.length ? "" : "disabled") + '>',
+      state.nodes.length ? options : '<option>No observed nodes</option>',
+      '</select>',
+      '</div>',
+      '<div class="notice">' + escapeHTML(selectedCopy) + '</div>',
+      '<div class="command-buttons">',
+      '<button class="btn primary" data-action="analyze" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("analysis") + 'Analyze causality</button>',
+      '<button class="btn" data-action="explain" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("explain") + 'Explain evidence</button>',
+      '<button class="btn warn" data-action="act" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("act") + 'Request action policy</button>',
+      '</div>',
+      '<div class="field">',
+      '<label for="apiKey">Action API key</label>',
+      '<input class="input" id="apiKey" type="password" autocomplete="off" value="' + escapeHTML(state.apiKey) + '" placeholder="Only needed when auth is enabled">',
+      '</div>',
+      state.nodes.length ? '' : '<button class="btn ghost" data-action="demo" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("demo") + 'Seed demo metric stream</button>',
+      renderPhases(),
+      renderHistory(),
+      '</div>',
+      '</section>'
+    ].join("");
+  }
+
+  function busyIcon(mode) {
+    if (state.busy === mode) return '<span class="spinner" aria-hidden="true"></span>';
+    if (mode === "analysis") return icon("play");
+    if (mode === "explain") return icon("graph");
+    if (mode === "act") return icon("bolt");
+    return icon("spark");
+  }
+
+  function renderPhases() {
+    if (!state.busy) {
+      return [
+        '<div class="stack">',
+        '<div class="section-label">Five-phase pipeline</div>',
+        '<div class="phase-list">',
+        phases.map(function (phase, index) {
+          return '<div class="phase"><div class="phase-num">' + (index + 1) + '</div><div>' + escapeHTML(phase) + '</div></div>';
+        }).join(""),
+        '</div>',
+        '</div>'
+      ].join("");
+    }
+    return [
+      '<div class="stack">',
+      '<div class="section-label">Running ' + escapeHTML(state.busy) + '</div>',
+      '<div class="phase-list">',
+      phases.map(function (phase, index) {
+        var cls = index < state.phase ? " done" : index === state.phase ? " active" : "";
+        var mark = index < state.phase ? icon("check") : (index + 1);
+        return '<div class="phase' + cls + '"><div class="phase-num">' + mark + '</div><div>' + escapeHTML(phase) + '</div></div>';
+      }).join(""),
+      '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderHistory() {
+    if (!state.history.length) return "";
+    return [
+      '<div class="stack">',
+      '<div class="section-label">Recent runs</div>',
+      '<div class="history">',
+      state.history.slice(0, 4).map(function (item) {
+        return [
+          '<div class="history-row">',
+          '<strong>' + escapeHTML(nameFor(item.root)) + '</strong>',
+          '<span class="dim">' + escapeHTML(item.kind) + ' - ' + escapeHTML(item.state) + ' - ' + pct(item.score) + ' - ' + escapeHTML(relativeTime(item.time)) + '</span>',
+          '</div>'
+        ].join("");
+      }).join(""),
+      '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderNodeMap() {
+    var nodes = sortedNodes();
+    return [
+      '<section class="panel node-map" id="map">',
+      '<div class="panel-head">',
+      '<div class="panel-title">' + icon("graph") + '<span>Observed Causal Surface</span></div>',
+      '<button class="btn ghost" data-action="demo" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("demo") + 'Demo stream</button>',
+      '</div>',
+      '<div class="panel-body">',
+      nodes.length ? '<div class="map-grid">' + nodes.map(renderNodeCard).join("") + '</div>' : renderEmptyMap(),
+      '</div>',
+      '</section>'
+    ].join("");
+  }
+
+  function renderNodeCard(node) {
+    var meta = statusForNode(node);
+    var width = Math.min(100, Math.max(0, Math.round((node.load || 0) * 100)));
+    return [
+      '<button class="node-card ' + (node.node_id === state.selected ? "selected" : "") + '" data-select="' + escapeHTML(node.node_id) + '">',
+      '<span class="state-pill ' + meta.key + '" style="position:absolute;right:10px;top:10px;">' + escapeHTML(meta.label) + '</span>',
+      '<div class="node-name">' + escapeHTML(nameFor(node.node_id)) + '</div>',
+      '<div class="node-id">' + escapeHTML(node.node_id) + '</div>',
+      '<div class="node-load"><div class="bar ' + meta.key + '"><span style="width:' + width + '%"></span></div></div>',
+      '<div class="node-meta"><span>' + pct(node.load || 0) + ' load</span><span>' + fmt(node.queue_length, 0) + ' queued</span></div>',
+      '<div class="node-meta" style="margin-top:8px;"><span>' + fmt(node.arrival_rate, 1) + ' in</span><span>' + fmt(node.service_rate, 1) + ' cap</span></div>',
+      '</button>'
+    ].join("");
+  }
+
+  function renderEmptyMap() {
+    return [
+      '<div class="empty">',
+      '<div>',
+      '<div class="state-pill info" style="display:inline-flex;">' + icon("database") + 'Awaiting nodes</div>',
+      '<h2>No observed services yet</h2>',
+      '<p>ABSIA will populate this surface from Prometheus or ingested samples. The demo stream creates a small distributed system without hand-entering services.</p>',
+      '<button class="btn primary" data-action="demo" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("demo") + 'Seed demo metric stream</button>',
+      '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderInsightPanel() {
+    return [
+      '<section class="panel insight" id="insight">',
+      '<div class="panel-head"><div class="panel-title">' + icon("shield") + '<span>Insight and Safety</span></div></div>',
+      '<div class="panel-body stack">',
+      state.error ? '<div class="notice bad">' + escapeHTML(state.error) + '</div>' : '',
+      state.actions ? renderActions() : '',
+      state.explanation ? renderExplanation() : '',
+      state.analysis ? renderAnalysis() : renderNoAnalysis(),
+      '</div>',
+      '</section>'
+    ].join("");
+  }
+
+  function renderNoAnalysis() {
+    return [
+      '<div class="result-hero">',
+      '<div class="result-title">Ready for causal analysis</div>',
+      '<div class="result-copy">Select an observed node or run the synthetic fallback, then execute the five-phase pipeline.</div>',
+      '</div>',
+      '<div class="result-grid">',
+      '<div class="mini-stat"><div class="label">Safety posture</div><div class="value">No decision</div></div>',
+      '<div class="mini-stat"><div class="label">Policy layer</div><div class="value">Idle</div></div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderAnalysis() {
+    var result = state.analysis;
+    var safety = result.safety || result;
+    var meta = safetyMeta(safety);
+    var root = result.root_cause || result.physics_root_cause || "unknown";
+    return [
+      '<div class="result-hero">',
+      '<span class="state-pill ' + meta.key + '">' + escapeHTML(meta.label) + ' safety gate</span>',
+      '<div class="result-title" style="margin-top:12px;">' + escapeHTML(nameFor(root)) + '</div>',
+      '<div class="result-copy">' + escapeHTML(summaryForAnalysis(result)) + '</div>',
+      '</div>',
+      '<div class="result-grid">',
+      miniStat("Confidence", pct(safety.confidence_score || result.confidence_score || 0)),
+      miniStat("Latent risk", safety.latent_risk || result.latent_risk || "UNKNOWN"),
+      miniStat("Graph coverage", pct(safety.graph_coverage || 0)),
+      miniStat("Execution", fmt(result.execution_time_ms, 1) + " ms"),
+      '</div>',
+      renderEvidence("Backdoor-adjusted effects", result.backdoor_effects || result.causes || {}),
+      renderFallback(safety)
+    ].join("");
+  }
+
+  function summaryForAnalysis(result) {
+    var safety = result.safety || result;
+    var root = result.root_cause || result.physics_root_cause;
+    var stateName = safety.confidence_state || result.confidence_state || "UNKNOWN";
+    if (!root) return "The run completed, but no stable root cause was identified. Check fallback reasons and probe recommendations.";
+    if (stateName === "CONFIRMED") return "ABSIA found a high-confidence causal origin and can support targeted remediation.";
+    if (stateName === "PROBABLE") return "ABSIA found a plausible causal origin. Treat the action policy as a recommendation, not automation.";
+    return "ABSIA refused to overstate the result. More instrumentation is needed before automated action.";
+  }
+
+  function renderExplanation() {
+    var exp = state.explanation;
+    return [
+      '<div class="section-label">Explanation layer</div>',
+      renderEvidence("Effects", exp.effects || {}),
+      renderEvidence("Uncertainty", exp.uncertainty || {})
+    ].join("");
+  }
+
+  function renderActions() {
+    var result = state.actions;
+    if (result.success === false) {
+      var safety = result.safety || result;
+      return [
+        '<div class="notice bad">',
+        '<strong>Action blocked.</strong> ',
+        escapeHTML((result.errors && result.errors[0]) || "The safety gate did not permit automated remediation."),
+        '</div>',
+        renderFallback(safety)
+      ].join("");
+    }
+    var actions = result.recommended_actions || [];
+    if (!actions.length) return '<div class="notice warn">No policy actions were returned for this run.</div>';
+    return [
+      '<div class="section-label">Policy actions</div>',
+      '<div class="evidence-list">',
+      actions.map(function (action) {
+        var label = Object.keys(action.interventions || {}).map(function (key) {
+          return nameFor(key) + " -> " + fmt(action.interventions[key], 2);
+        }).join(", ") || "No intervention value";
+        return [
+          '<div class="history-row">',
+          '<strong>Rank ' + escapeHTML(action.policy_rank || "-") + '</strong>',
+          '<span class="muted">' + escapeHTML(label) + '</span>',
+          '<div class="bar ok"><span style="width:' + Math.round((action.policy_score || 0) * 100) + '%"></span></div>',
+          '</div>'
+        ].join("");
+      }).join(""),
+      '</div>'
+    ].join("");
+  }
+
+  function renderEvidence(title, data) {
+    var entries = Object.keys(data || {}).map(function (key) {
+      return [key, Number(data[key]) || 0];
+    }).sort(function (a, b) { return Math.abs(b[1]) - Math.abs(a[1]); }).slice(0, 6);
+    if (!entries.length) return "";
+    var max = Math.max.apply(null, entries.map(function (x) { return Math.abs(x[1]); }).concat([1]));
+    return [
+      '<div class="stack">',
+      '<div class="section-label">' + escapeHTML(title) + '</div>',
+      '<div class="evidence-list">',
+      entries.map(function (entry) {
+        var width = Math.max(4, Math.round(Math.abs(entry[1]) / max * 100));
+        return [
+          '<div class="evidence-row">',
+          '<div>',
+          '<div class="evidence-name">' + escapeHTML(nameFor(entry[0])) + '</div>',
+          '<div class="bar info"><span style="width:' + width + '%"></span></div>',
+          '</div>',
+          '<div class="evidence-score">' + fmt(entry[1], 3) + '</div>',
+          '</div>'
+        ].join("");
+      }).join(""),
+      '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderFallback(safety) {
+    if (!safety) return "";
+    var reasons = safety.fallback_reasons || [];
+    var probes = safety.probe_nodes || safety.probe_recommendations || [];
+    if (!reasons.length && !probes.length) return "";
+    return [
+      '<div class="notice warn">',
+      reasons.length ? '<strong>Fallback reasons:</strong> ' + escapeHTML(reasons.join(", ")) + '<br>' : '',
+      probes.length ? '<strong>Probe next:</strong> ' + escapeHTML(probes.join(", ")) : '',
+      '</div>'
+    ].join("");
+  }
+
+  function miniStat(label, value) {
+    return '<div class="mini-stat"><div class="label">' + escapeHTML(label) + '</div><div class="value">' + escapeHTML(value) + '</div></div>';
+  }
+
+  function renderInventory() {
+    var rows = state.nodes.map(function (node) {
+      var meta = statusForNode(node);
+      return [
+        '<tr>',
+        '<td><strong>' + escapeHTML(nameFor(node.node_id)) + '</strong><div class="dim">' + escapeHTML(node.node_id) + '</div></td>',
+        '<td><span class="state-pill ' + meta.key + '">' + escapeHTML(meta.label) + '</span></td>',
+        '<td>' + fmt(node.arrival_rate, 1) + '</td>',
+        '<td>' + fmt(node.service_rate, 1) + '</td>',
+        '<td>' + pct(node.load || 0) + '</td>',
+        '<td>' + fmt(node.queue_length, 0) + '</td>',
+        '<td>' + fmt(node.sample_count, 0) + (node.pipeline_ready ? '<div class="dim">ready</div>' : '<div class="dim">needs 4 samples</div>') + '</td>',
+        '<td>' + escapeHTML(relativeTime(node.last_seen)) + '</td>',
+        '</tr>'
+      ].join("");
+    }).join("");
+    return [
+      '<section class="panel table-panel" id="nodes">',
+      '<div class="panel-head">',
+      '<div class="panel-title">' + icon("database") + '<span>Node Inventory</span></div>',
+      '<span class="chip">' + escapeHTML(state.nodes.length) + ' nodes</span>',
+      '</div>',
+      '<div class="table-wrap">',
+      '<table>',
+      '<thead><tr><th>Node</th><th>State</th><th>Arrival</th><th>Capacity</th><th>Load</th><th>Queue</th><th>Samples</th><th>Last seen</th></tr></thead>',
+      '<tbody>',
+      rows || '<tr><td colspan="8" class="muted">No observed nodes yet.</td></tr>',
+      '</tbody>',
+      '</table>',
+      '</div>',
+      '</section>'
+    ].join("");
+  }
+
+  function bindEvents() {
+    document.querySelectorAll("[data-action]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var action = el.getAttribute("data-action");
+        if (action === "refresh") refresh();
+        if (action === "analyze") runAnalyze();
+        if (action === "explain") runExplain();
+        if (action === "act") runAct();
+        if (action === "demo") seedDemo();
+      });
+    });
+    document.querySelectorAll("[data-select]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.selected = el.getAttribute("data-select");
+        render();
+      });
+    });
+    var select = document.getElementById("nodeSelect");
+    if (select) {
+      select.addEventListener("change", function () {
+        state.selected = select.value;
+        render();
+      });
+    }
+    var key = document.getElementById("apiKey");
+    if (key) {
+      key.addEventListener("input", function () {
+        state.apiKey = key.value;
+        localStorage.setItem("absia_api_key", state.apiKey);
+      });
+    }
+  }
+
+  render();
+  refresh();
+  refreshTimer = setInterval(refresh, 5000);
+  window.addEventListener("beforeunload", function () {
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (phaseTimer) clearInterval(phaseTimer);
+  });
+})();
+</script>
+</body>
+</html>
