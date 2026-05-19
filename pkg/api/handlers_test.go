@@ -16,7 +16,6 @@ func floatPtr(v float64) *float64 {
 	return &v
 }
 
-
 func TestHealthHandler_OK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
@@ -34,9 +33,9 @@ func TestHealthHandler_OK(t *testing.T) {
 	}
 }
 
-// 
+//
 // INPUT VALIDATION — MetricsRequest
-// 
+//
 
 func TestMetricsRequest_ValidInput(t *testing.T) {
 	req := MetricsRequest{ArrivalRate: floatPtr(5.0), ServiceRate: floatPtr(8.0), QueueLength: floatPtr(2.0)}
@@ -106,9 +105,9 @@ func TestMetricsRequest_ZeroArrivalRateIsValid(t *testing.T) {
 	}
 }
 
-// 
+//
 // METHOD ENFORCEMENT
-// 
+//
 
 func TestIngestHandler_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/ingest", nil)
@@ -128,9 +127,9 @@ func TestAnalyzeHandler_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// 
+//
 // BODY DECODING — INVALID JSON
-// 
+//
 
 func TestIngestHandler_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader("not-json"))
@@ -152,7 +151,7 @@ func TestAnalyzeHandler_InvalidJSON(t *testing.T) {
 }
 
 // BUSINESS VALIDATION — ZERO SERVICE RATE VIA HTTP
-// 
+//
 
 func TestAnalyzeHandler_ZeroServiceRateReturns400(t *testing.T) {
 	body := `{"arrival_rate":10,"service_rate":0,"queue_length":5}`
@@ -175,9 +174,9 @@ func TestIngestHandler_ZeroServiceRateReturns400(t *testing.T) {
 	}
 }
 
-// 
+//
 // INGEST — HAPPY PATH
-// 
+//
 
 func TestIngestHandler_ValidInput(t *testing.T) {
 	body := `{"node_id":"api","arrival_rate":5.0,"service_rate":8.0,"queue_length":2.0}`
@@ -229,9 +228,9 @@ func TestNodesHandler_ReturnsStoreInventory(t *testing.T) {
 	}
 }
 
-// 
+//
 // ANALYZE — HAPPY PATH (STABLE + OVERLOADED)
-// 
+//
 
 func TestAnalyzeHandler_StableSystem(t *testing.T) {
 	body := `{"arrival_rate":3.0,"service_rate":10.0,"queue_length":0.5}`
@@ -261,9 +260,9 @@ func TestAnalyzeHandler_OverloadedSystem(t *testing.T) {
 	}
 }
 
-// 
+//
 // CONTENT TYPE
-// 
+//
 
 func TestHandlers_ContentTypeAlwaysJSON(t *testing.T) {
 	tests := []struct {
@@ -290,9 +289,9 @@ func TestHandlers_ContentTypeAlwaysJSON(t *testing.T) {
 	}
 }
 
-// 
+//
 // HELPERS
-// 
+//
 
 func assertContentTypeJSON(t *testing.T, rr *httptest.ResponseRecorder) {
 	t.Helper()

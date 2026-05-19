@@ -31,6 +31,7 @@ func setup(t *testing.T, apiKey string) (*httptest.Server, *metricsstore.Store) 
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", api.HealthHandler)
+	mux.HandleFunc("/nodes", api.NodesHandler)
 	mux.HandleFunc("/ingest", api.IngestHandler)
 	mux.HandleFunc("/analyze", api.AnalyzeHandler)
 	mux.HandleFunc("/explain", api.ExplainHandler)
@@ -137,8 +138,8 @@ func TestIntegration_IngestAccumulatesAndTransitionToRealData(t *testing.T) {
 		}
 		resp := postJSON(t, srv, "/ingest", body, "")
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusAccepted {
-			t.Fatalf("ingest %d: expected 202, got %d", i, resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("ingest %d: expected 200, got %d", i, resp.StatusCode)
 		}
 	}
 
@@ -478,7 +479,7 @@ func TestIntegration_RealTimeSignalStream(t *testing.T) {
 		// simulate pattern (NOT random)
 		body := ingestBody{
 			NodeID:      "node_stream",
-			ArrivalRate: 5 + float64(i%10),   // wave pattern
+			ArrivalRate: 5 + float64(i%10), // wave pattern
 			ServiceRate: 10.0,
 			QueueLength: float64(i%5) * 1.5,
 		}
@@ -486,7 +487,7 @@ func TestIntegration_RealTimeSignalStream(t *testing.T) {
 		resp := postJSON(t, srv, "/ingest", body, "")
 		resp.Body.Close()
 
-		if resp.StatusCode != http.StatusAccepted {
+		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("ingest failed at %d: %d", i, resp.StatusCode)
 		}
 
@@ -532,24 +533,23 @@ func TestIntegration_ParallelLoadBreakTest(t *testing.T) {
 
 				step := i % 20
 
-// B = root cause (strong, deterministic spike)
-if node == "B" && step > 5{
+				// B = root cause (strong, deterministic spike)
+				if node == "B" && step > 5 {
 
-	body.ArrivalRate = 15
-}
+					body.ArrivalRate = 15
+				}
 
-// C = downstream effect (delayed, consistent)
-if node == "C" && step > 10{
-	body.QueueLength = 12
-}
+				// C = downstream effect (delayed, consistent)
+				if node == "C" && step > 10 {
+					body.QueueLength = 12
+				}
 
-// A = effect node (no direct manipulation)
-
+				// A = effect node (no direct manipulation)
 
 				resp := postJSON(t, srv, "/ingest", body, "")
 				resp.Body.Close()
 
-				if resp.StatusCode != http.StatusAccepted {
+				if resp.StatusCode != http.StatusOK {
 					done <- fmt.Errorf("worker %d ingest fail", id)
 					return
 				}
