@@ -862,14 +862,6 @@ tr:last-child td {
     "Policy and safety"
   ];
 
-  var demoNodes = [
-    { id: "edge-gateway", arrival: 148, service: 178, queue: 10 },
-    { id: "auth-service", arrival: 84, service: 126, queue: 5 },
-    { id: "orders-api", arrival: 218, service: 234, queue: 19 },
-    { id: "redis-cache", arrival: 72, service: 150, queue: 2 },
-    { id: "primary-database", arrival: 188, service: 142, queue: 58 }
-  ];
-
   var icons = {
     activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>',
     refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2"></path><path d="M3 17v5h5"></path><path d="M3 12A9 9 0 0 1 18.5 5.8"></path><path d="M21 7V2h-5"></path>',
@@ -998,7 +990,7 @@ tr:last-child td {
   function bodyForSelection() {
     var node = selectedNode();
     if (!node) {
-      return { arrival_rate: 96, service_rate: 72, queue_length: 24 };
+      return null;
     }
     return {
       node_id: node.node_id,
@@ -1061,9 +1053,15 @@ tr:last-child td {
   }
 
   async function runAnalyze() {
+    var body = bodyForSelection();
+    if (!body) {
+      state.error = "ABSIA is waiting for service metrics. Connect Prometheus or send samples to /ingest first.";
+      render();
+      return;
+    }
     startBusy("analysis");
     try {
-      var result = await apiPost("/analyze", bodyForSelection());
+      var result = await apiPost("/analyze", body);
       stopBusy(false);
       if (result.success === false || result.errors) {
         state.error = (result.errors && result.errors[0]) || "Analysis failed.";
@@ -1082,9 +1080,15 @@ tr:last-child td {
   }
 
   async function runExplain() {
+    var body = bodyForSelection();
+    if (!body) {
+      state.error = "ABSIA is waiting for service metrics. Connect Prometheus or send samples to /ingest first.";
+      render();
+      return;
+    }
     startBusy("explain");
     try {
-      var result = await apiPost("/explain", bodyForSelection());
+      var result = await apiPost("/explain", body);
       stopBusy(false);
       if (result.success === false || result.errors) {
         state.error = (result.errors && result.errors[0]) || "Explanation failed.";
@@ -1102,9 +1106,15 @@ tr:last-child td {
   }
 
   async function runAct() {
+    var body = bodyForSelection();
+    if (!body) {
+      state.error = "ABSIA is waiting for service metrics. Connect Prometheus or send samples to /ingest first.";
+      render();
+      return;
+    }
     startBusy("act");
     try {
-      var result = await apiPost("/act", bodyForSelection(), state.apiKey);
+      var result = await apiPost("/act", body, state.apiKey);
       stopBusy(false);
       state.actions = result;
       if (result.success === false && result.errors) {
@@ -1117,29 +1127,6 @@ tr:last-child td {
     } catch (err) {
       stopBusy(false);
       state.error = "Action request failed.";
-      render();
-    }
-  }
-
-  async function seedDemo() {
-    startBusy("demo");
-    try {
-      for (var i = 0; i < 4; i++) {
-        for (var j = 0; j < demoNodes.length; j++) {
-          var n = demoNodes[j];
-          await apiPost("/ingest", {
-            node_id: n.id,
-            arrival_rate: n.arrival + i * (j % 2 === 0 ? 4 : -2),
-            service_rate: n.service,
-            queue_length: n.queue + i * (j === 4 ? 7 : 1)
-          });
-        }
-      }
-      stopBusy(false);
-      await refresh();
-    } catch (err) {
-      stopBusy(false);
-      state.error = "Could not seed the demo metric stream.";
       render();
     }
   }
@@ -1188,7 +1175,7 @@ tr:last-child td {
       '</div>',
       '<div class="top-actions">',
       '<span class="chip ' + (online ? "ok live" : "bad") + '"><span class="dot"></span>' + (online ? "API online" : "API offline") + '</span>',
-      '<span class="chip ' + (real ? "ok" : "warn") + '">' + (real ? "Real data" : "Synthetic fallback") + '</span>',
+      '<span class="chip ' + (real ? "ok" : "warn") + '">' + (real ? "Real data" : "Awaiting metrics") + '</span>',
       '<span class="chip info">' + escapeHTML(last) + '</span>',
       '<button class="icon-btn" data-action="refresh" title="Refresh">' + icon("refresh") + '</button>',
       '</div>',
@@ -1224,12 +1211,13 @@ tr:last-child td {
 
   function renderCommandPanel() {
     var node = selectedNode();
+    var disableCommand = state.busy || !node;
     var options = state.nodes.map(function (n) {
       return '<option value="' + escapeHTML(n.node_id) + '"' + (n.node_id === state.selected ? " selected" : "") + '>' + escapeHTML(nameFor(n.node_id)) + ' - ' + escapeHTML(n.node_id) + '</option>';
     }).join("");
     var selectedCopy = node
       ? 'Load ' + pct(node.load || 0) + ', queue ' + fmt(node.queue_length, 0) + ', samples ' + fmt(node.sample_count, 0)
-      : 'No live node selected. Synthetic fallback can still run.';
+      : 'No observed node yet. Connect Prometheus or send samples to /ingest.';
     return [
       '<section class="panel" id="command">',
       '<div class="panel-head"><div class="panel-title">' + icon("target") + '<span>Command</span></div></div>',
@@ -1242,15 +1230,14 @@ tr:last-child td {
       '</div>',
       '<div class="notice">' + escapeHTML(selectedCopy) + '</div>',
       '<div class="command-buttons">',
-      '<button class="btn primary" data-action="analyze" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("analysis") + 'Analyze causality</button>',
-      '<button class="btn" data-action="explain" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("explain") + 'Explain evidence</button>',
-      '<button class="btn warn" data-action="act" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("act") + 'Request action policy</button>',
+      '<button class="btn primary" data-action="analyze" ' + (disableCommand ? "disabled" : "") + '>' + busyIcon("analysis") + 'Analyze causality</button>',
+      '<button class="btn" data-action="explain" ' + (disableCommand ? "disabled" : "") + '>' + busyIcon("explain") + 'Explain evidence</button>',
+      '<button class="btn warn" data-action="act" ' + (disableCommand ? "disabled" : "") + '>' + busyIcon("act") + 'Request action policy</button>',
       '</div>',
       '<div class="field">',
       '<label for="apiKey">Action API key</label>',
       '<input class="input" id="apiKey" type="password" autocomplete="off" value="' + escapeHTML(state.apiKey) + '" placeholder="Only needed when auth is enabled">',
       '</div>',
-      state.nodes.length ? '' : '<button class="btn ghost" data-action="demo" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("demo") + 'Seed demo metric stream</button>',
       renderPhases(),
       renderHistory(),
       '</div>',
@@ -1318,7 +1305,7 @@ tr:last-child td {
       '<section class="panel node-map" id="map">',
       '<div class="panel-head">',
       '<div class="panel-title">' + icon("graph") + '<span>Observed Causal Surface</span></div>',
-      '<button class="btn ghost" data-action="demo" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("demo") + 'Demo stream</button>',
+      '<span class="chip">' + escapeHTML(nodes.length) + ' observed</span>',
       '</div>',
       '<div class="panel-body">',
       nodes.length ? '<div class="map-grid">' + nodes.map(renderNodeCard).join("") + '</div>' : renderEmptyMap(),
@@ -1348,8 +1335,7 @@ tr:last-child td {
       '<div>',
       '<div class="state-pill info" style="display:inline-flex;">' + icon("database") + 'Awaiting nodes</div>',
       '<h2>No observed services yet</h2>',
-      '<p>ABSIA will populate this surface from Prometheus or ingested samples. The demo stream creates a small distributed system without hand-entering services.</p>',
-      '<button class="btn primary" data-action="demo" ' + (state.busy ? "disabled" : "") + '>' + busyIcon("demo") + 'Seed demo metric stream</button>',
+      '<p>Run ABSIA beside your app, expose port 8080, and connect metrics through Prometheus or POST /ingest. Nodes appear here automatically.</p>',
       '</div>',
       '</div>'
     ].join("");
@@ -1373,7 +1359,7 @@ tr:last-child td {
     return [
       '<div class="result-hero">',
       '<div class="result-title">Ready for causal analysis</div>',
-      '<div class="result-copy">Select an observed node or run the synthetic fallback, then execute the five-phase pipeline.</div>',
+      '<div class="result-copy">When metrics arrive, select an observed node and execute the five-phase pipeline.</div>',
       '</div>',
       '<div class="result-grid">',
       '<div class="mini-stat"><div class="label">Safety posture</div><div class="value">No decision</div></div>',
@@ -1542,7 +1528,6 @@ tr:last-child td {
         if (action === "analyze") runAnalyze();
         if (action === "explain") runExplain();
         if (action === "act") runAct();
-        if (action === "demo") seedDemo();
       });
     });
     document.querySelectorAll("[data-select]").forEach(function (el) {

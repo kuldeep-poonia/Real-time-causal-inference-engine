@@ -7,7 +7,7 @@ services:
     container_name: absia
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8080:8080"
     environment:
       ABSIA_API_KEY: "${ABSIA_API_KEY:-}"
       ABSIA_LOG_LEVEL: "${ABSIA_LOG_LEVEL:-info}"
@@ -45,17 +45,6 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=1h
-
-  stress1:
-    image: alpine
-    command: ["sh", "-c", "yes > /dev/null"]
-
-  stress2:
-    image: alpine
-    command: ["sh", "-c", "yes > /dev/null"]
-
-
-
 
   node_exporter:
     image: prom/node-exporter
