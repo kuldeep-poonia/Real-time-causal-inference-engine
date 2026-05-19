@@ -327,9 +327,17 @@ func computeCorrelationMatrix(matrix [][]float64) [][]float64 {
 
 /*
 pearson correlation
+
+Handles zero-variance edge cases per standard statistical conventions:
+  - Self-correlation (identical signals): return 1.0 (diagonal invariant)
+  - Cross-correlation where one or both have zero variance: return 0.0
+    (no linear relationship is detectable when variance is absent)
 */
 func computeCorrelation(x, y []float64) float64 {
 
+	if len(x) == 0 || len(x) != len(y) {
+		return 0
+	}
 
 	meanX := computeMean(x)
 	meanY := computeMean(y)
@@ -345,13 +353,40 @@ func computeCorrelation(x, y []float64) float64 {
 		sumY2 += dy * dy
 	}
 
-	den := math.Sqrt(sumX2 * sumY2)
+	xZeroVar := sumX2 < 1e-30
+	yZeroVar := sumY2 < 1e-30
 
-	if den == 0 {
-		return 0
+	if xZeroVar || yZeroVar {
+		// Both signals have zero variance: check if they are identical
+		// (self-correlation diagonal case or identical constant columns).
+		if xZeroVar && yZeroVar {
+			// If every element is equal between x and y, this is
+			// self-correlation (or effectively identical signals) → 1.0.
+			identical := true
+			for i := range x {
+				if math.Abs(x[i]-y[i]) > 1e-15 {
+					identical = false
+					break
+				}
+			}
+			if identical {
+				return 1.0
+			}
+		}
+		// One or both have zero variance but they differ → no correlation.
+		return 0.0
 	}
 
-	return sumXY / den
+	den := math.Sqrt(sumX2 * sumY2)
+
+	// Clamp to [-1, 1] to guard against floating-point overshoot.
+	r := sumXY / den
+	if r > 1.0 {
+		r = 1.0
+	} else if r < -1.0 {
+		r = -1.0
+	}
+	return r
 }
 
 
