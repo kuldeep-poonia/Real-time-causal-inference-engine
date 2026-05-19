@@ -9,9 +9,10 @@ import (
 	"testing"
 )
 
-// ============================================================================
-// HEALTH
-// ============================================================================
+func floatPtr(v float64) *float64 {
+	return &v
+}
+
 
 func TestHealthHandler_OK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -30,12 +31,12 @@ func TestHealthHandler_OK(t *testing.T) {
 	}
 }
 
-// ============================================================================
+// 
 // INPUT VALIDATION — MetricsRequest
-// ============================================================================
+// 
 
 func TestMetricsRequest_ValidInput(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: 5.0, ServiceRate: 8.0, QueueLength: 2.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(5.0), ServiceRate: floatPtr(8.0), QueueLength: floatPtr(2.0)}
 	errs := req.validate()
 	if len(errs) != 0 {
 		t.Errorf("valid input produced validation errors: %v", errs)
@@ -43,7 +44,7 @@ func TestMetricsRequest_ValidInput(t *testing.T) {
 }
 
 func TestMetricsRequest_ZeroServiceRate(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: 5.0, ServiceRate: 0.0, QueueLength: 0.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(5.0), ServiceRate: floatPtr(0.0), QueueLength: floatPtr(0.0)}
 	errs := req.validate()
 	if len(errs) == 0 {
 		t.Error("zero service_rate should fail validation")
@@ -54,7 +55,7 @@ func TestMetricsRequest_ZeroServiceRate(t *testing.T) {
 }
 
 func TestMetricsRequest_NegativeServiceRate(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: 5.0, ServiceRate: -1.0, QueueLength: 0.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(5.0), ServiceRate: floatPtr(-1.0), QueueLength: floatPtr(0.0)}
 	errs := req.validate()
 	if len(errs) == 0 {
 		t.Error("negative service_rate should fail validation")
@@ -62,7 +63,7 @@ func TestMetricsRequest_NegativeServiceRate(t *testing.T) {
 }
 
 func TestMetricsRequest_NegativeArrivalRate(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: -0.1, ServiceRate: 8.0, QueueLength: 0.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(-0.1), ServiceRate: floatPtr(8.0), QueueLength: floatPtr(0.0)}
 	errs := req.validate()
 	if len(errs) == 0 {
 		t.Error("negative arrival_rate should fail validation")
@@ -70,7 +71,7 @@ func TestMetricsRequest_NegativeArrivalRate(t *testing.T) {
 }
 
 func TestMetricsRequest_NegativeQueueLength(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: 5.0, ServiceRate: 8.0, QueueLength: -1.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(5.0), ServiceRate: floatPtr(8.0), QueueLength: floatPtr(-1.0)}
 	errs := req.validate()
 	if len(errs) == 0 {
 		t.Error("negative queue_length should fail validation")
@@ -78,7 +79,7 @@ func TestMetricsRequest_NegativeQueueLength(t *testing.T) {
 }
 
 func TestMetricsRequest_ExcessiveArrivalRate(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: 2e9, ServiceRate: 8.0, QueueLength: 0.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(2e9), ServiceRate: floatPtr(8.0), QueueLength: floatPtr(0.0)}
 	errs := req.validate()
 	if len(errs) == 0 {
 		t.Error("arrival_rate > 1e9 should fail validation")
@@ -86,7 +87,7 @@ func TestMetricsRequest_ExcessiveArrivalRate(t *testing.T) {
 }
 
 func TestMetricsRequest_ExcessiveServiceRate(t *testing.T) {
-	req := MetricsRequest{ArrivalRate: 5.0, ServiceRate: 2e9, QueueLength: 0.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(5.0), ServiceRate: floatPtr(2e9), QueueLength: floatPtr(0.0)}
 	errs := req.validate()
 	if len(errs) == 0 {
 		t.Error("service_rate > 1e9 should fail validation")
@@ -95,16 +96,16 @@ func TestMetricsRequest_ExcessiveServiceRate(t *testing.T) {
 
 func TestMetricsRequest_ZeroArrivalRateIsValid(t *testing.T) {
 	// arrivalRate=0 is valid (idle system).
-	req := MetricsRequest{ArrivalRate: 0.0, ServiceRate: 8.0, QueueLength: 0.0}
+	req := MetricsRequest{ArrivalRate: floatPtr(0.0), ServiceRate: floatPtr(8.0), QueueLength: floatPtr(0.0)}
 	errs := req.validate()
 	if len(errs) != 0 {
 		t.Errorf("zero arrival_rate should be valid (idle system), got errors: %v", errs)
 	}
 }
 
-// ============================================================================
+// 
 // METHOD ENFORCEMENT
-// ============================================================================
+// 
 
 func TestIngestHandler_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/ingest", nil)
@@ -124,9 +125,9 @@ func TestAnalyzeHandler_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// ============================================================================
+// 
 // BODY DECODING — INVALID JSON
-// ============================================================================
+// 
 
 func TestIngestHandler_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader("not-json"))
@@ -147,9 +148,8 @@ func TestAnalyzeHandler_InvalidJSON(t *testing.T) {
 	}
 }
 
-// ============================================================================
 // BUSINESS VALIDATION — ZERO SERVICE RATE VIA HTTP
-// ============================================================================
+// 
 
 func TestAnalyzeHandler_ZeroServiceRateReturns422(t *testing.T) {
 	body := `{"arrival_rate":10,"service_rate":0,"queue_length":5}`
@@ -172,9 +172,9 @@ func TestIngestHandler_ZeroServiceRateReturns422(t *testing.T) {
 	}
 }
 
-// ============================================================================
+// 
 // INGEST — HAPPY PATH
-// ============================================================================
+// 
 
 func TestIngestHandler_ValidInput(t *testing.T) {
 	body := `{"arrival_rate":5.0,"service_rate":8.0,"queue_length":2.0}`
@@ -187,9 +187,9 @@ func TestIngestHandler_ValidInput(t *testing.T) {
 	assertContentTypeJSON(t, rr)
 }
 
-// ============================================================================
+// 
 // ANALYZE — HAPPY PATH (STABLE + OVERLOADED)
-// ============================================================================
+// 
 
 func TestAnalyzeHandler_StableSystem(t *testing.T) {
 	body := `{"arrival_rate":3.0,"service_rate":10.0,"queue_length":0.5}`
@@ -219,9 +219,9 @@ func TestAnalyzeHandler_OverloadedSystem(t *testing.T) {
 	}
 }
 
-// ============================================================================
+// 
 // CONTENT TYPE
-// ============================================================================
+// 
 
 func TestHandlers_ContentTypeAlwaysJSON(t *testing.T) {
 	tests := []struct {
@@ -248,9 +248,9 @@ func TestHandlers_ContentTypeAlwaysJSON(t *testing.T) {
 	}
 }
 
-// ============================================================================
+// 
 // HELPERS
-// ============================================================================
+// 
 
 func assertContentTypeJSON(t *testing.T, rr *httptest.ResponseRecorder) {
 	t.Helper()

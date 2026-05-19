@@ -16,9 +16,9 @@ type pathNode struct {
 	From   string
 }
 
-// ===============================
+
 // PUBLIC API
-// ===============================
+
 
 // IsDSeparated reports whether X ⊥ Y | Z holds in graph.
 // A pair is d-separated if every path between them is blocked.
@@ -83,9 +83,9 @@ func FindMinimalAdjustmentSet(
 	return minimal
 }
 
-// ===============================
+
 // CORE LOGIC
-// ===============================
+
 
 func hasActivePath(
 	graph *Graph,
@@ -125,9 +125,9 @@ func hasActivePath(
 	return false
 }
 
-// ===============================
+
 // TRIPLET RULE (COMPLETE THEORY)
-// ===============================
+
 
 func isActiveTriplet(
 	graph *Graph,
@@ -171,9 +171,9 @@ func isActiveTriplet(
 	return true
 }
 
-// ===============================
+
 // GRAPH HELPERS
-// ===============================
+
 
 func getNeighbors(graph *Graph, node string) []string {
 
@@ -203,9 +203,9 @@ func hasEdge(graph *Graph, from, to string) bool {
 	return false
 }
 
-// ===============================
+
 // ANCESTOR / DESCENDANT HELPERS
-// ===============================
+
 
 // allAncestors returns the set of all nodes that are ancestors of ANY node
 // in the conditioned set. Used to check collider descendant activation.
@@ -246,9 +246,9 @@ func markDescendants(graph *Graph, node string, result map[string]bool) {
 	}
 }
 
-// ===============================
+
 // SET HELPERS
-// ===============================
+
 
 func toSet(keys []string) map[string]bool {
 	m := make(map[string]bool, len(keys))

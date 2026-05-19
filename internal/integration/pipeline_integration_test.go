@@ -461,3 +461,116 @@ func TestIntegration_InvalidJSONReturns400(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegration_RealTimeSignalStream(t *testing.T) {
+	srv, _ := setup(t, "")
+
+	type ingestBody struct {
+		NodeID      string  `json:"node_id"`
+		ArrivalRate float64 `json:"arrival_rate"`
+		ServiceRate float64 `json:"service_rate"`
+		QueueLength float64 `json:"queue_length"`
+	}
+
+	// simulate continuous stream
+	for i := 0; i < 50; i++ {
+
+		// simulate pattern (NOT random)
+		body := ingestBody{
+			NodeID:      "node_stream",
+			ArrivalRate: 5 + float64(i%10),   // wave pattern
+			ServiceRate: 10.0,
+			QueueLength: float64(i%5) * 1.5,
+		}
+
+		resp := postJSON(t, srv, "/ingest", body, "")
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusAccepted {
+			t.Fatalf("ingest failed at %d: %d", i, resp.StatusCode)
+		}
+
+		// every few steps → analyze
+		if i%5 == 0 {
+			resp := postJSON(t, srv, "/analyze", body, "")
+			resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("analyze failed at %d: %d", i, resp.StatusCode)
+			}
+		}
+	}
+}
+
+func TestIntegration_ParallelLoadBreakTest(t *testing.T) {
+	srv, _ := setup(t, "")
+
+	type ingestBody struct {
+		NodeID      string  `json:"node_id"`
+		ArrivalRate float64 `json:"arrival_rate"`
+		ServiceRate float64 `json:"service_rate"`
+		QueueLength float64 `json:"queue_length"`
+	}
+
+	const workers = 20
+	done := make(chan error, workers)
+
+	for w := 0; w < workers; w++ {
+		go func(id int) {
+			for i := 0; i < 30; i++ {
+
+				// ✅ multi-node setup
+				nodes := []string{"A", "B", "C"}
+				node := nodes[i%3]
+
+				body := ingestBody{
+					NodeID:      node,
+					ArrivalRate: 6,
+					ServiceRate: 10.0,
+					QueueLength: 2,
+				}
+
+				step := i % 20
+
+// B = root cause (strong, deterministic spike)
+if node == "B" && step > 5{
+
+	body.ArrivalRate = 15
+}
+
+// C = downstream effect (delayed, consistent)
+if node == "C" && step > 10{
+	body.QueueLength = 12
+}
+
+// A = effect node (no direct manipulation)
+
+
+				resp := postJSON(t, srv, "/ingest", body, "")
+				resp.Body.Close()
+
+				if resp.StatusCode != http.StatusAccepted {
+					done <- fmt.Errorf("worker %d ingest fail", id)
+					return
+				}
+
+				if i%3 == 0 {
+					resp := postJSON(t, srv, "/analyze", body, "")
+					resp.Body.Close()
+
+					if resp.StatusCode != http.StatusOK {
+						done <- fmt.Errorf("worker %d analyze fail", id)
+						return
+					}
+				}
+			}
+			done <- nil
+		}(w)
+	}
+
+	for i := 0; i < workers; i++ {
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	}
+}

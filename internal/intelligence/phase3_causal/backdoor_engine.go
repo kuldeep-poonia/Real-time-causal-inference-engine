@@ -21,9 +21,9 @@ type BackdoorResult struct {
 	UsedZ  []string
 }
 
-// =======================
+// 
 // ENTRY POINT
-// =======================
+// 
 
 func ComputeBackdoorEffect(
 	graph *Graph,
@@ -69,9 +69,9 @@ func ComputeBackdoorEffect(
 	}
 }
 
-// =======================
+// 
 // BACKDOOR SET
-// =======================
+// 
 
 func findBackdoorSet(graph *Graph, X, Y string) []string {
 	Z := make(map[string]bool)
@@ -87,9 +87,9 @@ func findBackdoorSet(graph *Graph, X, Y string) []string {
 	return result
 }
 
-// =======================
+// 
 // CONDITIONAL EFFECT
-// =======================
+// 
 
 func estimateConditionalEffect(
 	data *TemporalGraph,
@@ -140,9 +140,9 @@ func estimateConditionalEffect(
 
 	return sumDXDY / sumDX2
 }
-// =======================
+// 
 // MARGINAL P(Z)
-// =======================
+// 
 
 // estimateMarginal returns a normalised empirical frequency weight for
 // confounder Z in the backdoor formula: E[Y|do(X)] = Σ_z E[Y|X,Z=z] × P(Z=z).
@@ -213,9 +213,9 @@ func estimateMarginal(
 	return float64(counts[lastBin]) / float64(n)
 }
 
-// =======================
+// 
 // DIRECT EFFECT (fallback)
-// =======================
+// 
 
 func estimateDirectEffect(
 	data *TemporalGraph,
@@ -257,9 +257,9 @@ func estimateDirectEffect(
 	return sumDXDY / sumDX2
 }
 
-// =======================
+// 
 // HELPERS
-// =======================
+// 
 
 func min2(a, b int) int {
 	if a < b {

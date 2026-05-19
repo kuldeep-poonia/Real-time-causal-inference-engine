@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// ============================================================================
+
 // D-SEPARATION TESTS
-// ============================================================================
+
 
 // TestDSepChain verifies that conditioning on the middle node of a chain blocks
 // the path. Pearl, Causality §1.2.3: X → Z → Y is blocked by conditioning on Z.
@@ -112,9 +112,9 @@ func TestFindMinimalAdjustmentSetChain(t *testing.T) {
 	}
 }
 
-// ============================================================================
+
 // CAUSAL INFERENCE — INTERVENTION TEST
-// ============================================================================
+
 
 // TestSeriesInterventionTest_CausalRelation verifies that a genuine lag-1 causal
 // series (source(t) causes target(t+1)) passes the intervention test.
@@ -172,9 +172,9 @@ func TestSeriesInterventionTest_TooShort(t *testing.T) {
 	}
 }
 
-// ============================================================================
+
 // RATE FUNCTION — BIAS REGRESSION TEST
-// ============================================================================
+
 
 // TestRateFunction_UnbiasedEstimate is a regression test for the biased rate()
 // function that was summing only positive deltas.
@@ -203,9 +203,9 @@ func TestRateFunction_UnbiasedEstimate(t *testing.T) {
 	}
 }
 
-// ============================================================================
+
 // PEARSON LAGGED — NUMERICAL STABILITY
-// ============================================================================
+
 
 // TestPearsonLagged_ConstantSeries verifies that a constant source series
 // returns 0 (zero variance → zero correlation) without dividing by zero.
@@ -232,9 +232,9 @@ func TestPearsonLagged_ShortSeries(t *testing.T) {
 	}
 }
 
-// ============================================================================
+
 // CAUSAL INFERENCE — END TO END (MINIMAL)
-// ============================================================================
+
 
 // TestRunCausalInference_EmptyHypotheses verifies nil return on empty input.
 func TestRunCausalInference_EmptyHypotheses(t *testing.T) {
@@ -306,9 +306,9 @@ func TestRunCausalInference_OverloadedNode(t *testing.T) {
 	}
 }
 
-// ============================================================================
+
 // HELPERS — GRAPH CONSTRUCTORS
-// ============================================================================
+
 
 func chainGraph() *Graph {
 	a := &Node{ID: "A"}
