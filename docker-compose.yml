@@ -1,33 +1,23 @@
+
+version: '3.8'
 services:
   absia:
     build:
       context: .
       dockerfile: Dockerfile
     image: absia:latest
-    
     restart: unless-stopped
     ports:
       - "8088:8080"
     environment:
-      ABSIA_API_KEY: "${ABSIA_API_KEY:-}"
-      ABSIA_LOG_LEVEL: "${ABSIA_LOG_LEVEL:-info}"
-      ABSIA_SEED: "${ABSIA_SEED:-42}"
+      # API key is optional; only needed for /act endpoint
+      # ABSIA_API_KEY: "your-optional-api-key"
       ABSIA_POLICY_STORE_PATH: /data/policies
-      ABSIA_MAX_BODY_BYTES: "${ABSIA_MAX_BODY_BYTES:-1048576}"
-      ABSIA_RATE_LIMIT_RPS: "${ABSIA_RATE_LIMIT_RPS:-10}"
-      ABSIA_RATE_LIMIT_BURST: "${ABSIA_RATE_LIMIT_BURST:-20}"
-      ABSIA_READ_TIMEOUT_SECONDS: "${ABSIA_READ_TIMEOUT_SECONDS:-5}"
-      ABSIA_WRITE_TIMEOUT_SECONDS: "${ABSIA_WRITE_TIMEOUT_SECONDS:-30}"
-      ABSIA_IDLE_TIMEOUT_SECONDS: "${ABSIA_IDLE_TIMEOUT_SECONDS:-120}"
-      PROMETHEUS_URL: "http://prometheus:9090"
-      PROMETHEUS_QUERY: "rate(container_cpu_usage_seconds_total[1m])"
+      ABSIA_METRICS_STORE_PATH: /data/metrics
       PORT: "8080"
     volumes:
       - policy_data:/data/policies
-    depends_on:
-      - prometheus
-      - cadvisor
-      - node_exporter
+      - metrics_data:/data/metrics
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 15s
@@ -35,33 +25,11 @@ services:
       retries: 3
       start_period: 10s
 
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    
-    ports:
-      - "9091:9090"
-    volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=1h
-
-  node_exporter:
-    image: prom/node-exporter
-    
-    ports:
-      - "9102:9100"
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    
-    ports:
-      - "8082:8080"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+  # Add your own services below. Example:
+  # myservice:
+  #   image: your-service-image
+  #   ...
 
 volumes:
   policy_data:
+  metrics_data:

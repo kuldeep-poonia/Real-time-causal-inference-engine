@@ -1386,6 +1386,8 @@ tr:last-child td {
       '<button class="node-card ' + (node.node_id === state.selected ? "selected" : "") + '" data-select="' + escapeHTML(node.node_id) + '">',
       '<span class="state-pill ' + meta.key + '" style="position:absolute;right:10px;top:10px;">' + escapeHTML(meta.label) + '</span>',
       '<div class="node-name">' + escapeHTML(nameFor(node.node_id)) + '</div>',
+      (node.container_name ? '<div class="node-id">' + escapeHTML(node.container_name) + '</div>' : ''),
+      (node.image ? '<div class="node-id dim">' + escapeHTML(node.image) + '</div>' : ''),
       '<div class="node-id">' + escapeHTML(node.node_id) + '</div>',
       '<div class="node-load"><div class="bar ' + meta.key + '"><span style="width:' + width + '%"></span></div></div>',
       '<div class="node-meta"><span>' + pct(node.load || 0) + ' load</span><span>' + fmt(node.queue_length, 0) + ' queued</span></div>',
@@ -1556,7 +1558,10 @@ tr:last-child td {
       var meta = statusForNode(node);
       return [
         '<tr>',
-        '<td><strong>' + escapeHTML(nameFor(node.node_id)) + '</strong><div class="dim">' + escapeHTML(node.node_id) + '</div></td>',
+        '<td><strong>' + escapeHTML(nameFor(node.node_id)) + '</strong>' +
+          (node.container_name ? '<div class="dim">' + escapeHTML(node.container_name) + '</div>' : '') +
+          (node.image ? '<div class="dim">' + escapeHTML(node.image) + '</div>' : '') +
+          '<div class="dim">' + escapeHTML(node.node_id) + '</div></td>',
         '<td><span class="state-pill ' + meta.key + '">' + escapeHTML(meta.label) + '</span></td>',
         '<td>' + fmt(node.arrival_rate, 1) + '</td>',
         '<td>' + fmt(node.service_rate, 1) + '</td>',

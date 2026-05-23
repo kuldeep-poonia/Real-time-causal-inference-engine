@@ -16,11 +16,10 @@ import (
 
 	phase4 "absia/internal/intelligence/phase4_explanation"
 	phase5 "absia/internal/intelligence/phase5_insight"
+	"absia/pkg/autodetect"
 	"absia/pkg/logger"
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 /*
@@ -332,6 +331,8 @@ type HealthResponse struct {
 
 type NodeSnapshot struct {
 	NodeID        string  `json:"node_id"`
+	ContainerName string  `json:"container_name,omitempty"`
+	Image         string  `json:"image,omitempty"`
 	ArrivalRate   float64 `json:"arrival_rate"`
 	ServiceRate   float64 `json:"service_rate"`
 	QueueLength   float64 `json:"queue_length"`
@@ -531,6 +532,16 @@ func NodesHandler(w http.ResponseWriter, r *http.Request) {
 	resp.NodeCount = len(ids)
 	resp.RealDataAvailable = globalStore.HasRealData()
 
+	// Try to enrich with autodetect container info
+	var containerMeta map[string]struct{ Name, Image string }
+	containerMeta = make(map[string]struct{ Name, Image string })
+	// Best effort: call autodetect if available
+	if containers, err := autodetect.DiscoverContainers(r.Context()); err == nil {
+		for _, c := range containers {
+			containerMeta[c.ID] = struct{ Name, Image string }{c.Name, c.Image}
+		}
+	}
+
 	for _, id := range ids {
 		sample, ok := globalStore.GetLatestSample(id)
 		if !ok {
@@ -557,9 +568,17 @@ func NodesHandler(w http.ResponseWriter, r *http.Request) {
 			lastSeen = time.Unix(int64(sample.Timestamp), 0).UTC().Format(time.RFC3339)
 		}
 
+		// Try to match container meta by node ID (container name or ID)
+		cname, cimage := "", ""
+		if meta, ok := containerMeta[id]; ok {
+			cname, cimage = meta.Name, meta.Image
+		}
+
 		count := globalStore.SampleCount(id)
 		resp.Nodes = append(resp.Nodes, NodeSnapshot{
 			NodeID:        id,
+			ContainerName: cname,
+			Image:         cimage,
 			ArrivalRate:   sample.ArrivalRate,
 			ServiceRate:   sample.ServiceRate,
 			QueueLength:   sample.QueueLength,
@@ -995,6 +1014,61 @@ type ServerConfig struct {
 	IdleTimeoutSeconds  int
 }
 
+// metricsHandler exposes ABSIA operational metrics in Prometheus text format
+// (https://prometheus.io/docs/instrumenting/exposition_formats/).
+// No external dependency — the format is plain text, trivially hand-written.
+//
+// Exposed metrics:
+//
+//	absia_nodes_total          – number of distinct nodes in the metrics store
+//	absia_nodes_with_data      – nodes with ≥4 samples (pipeline-ready)
+//	absia_store_samples_total  – sum of all stored samples across all nodes
+//	absia_docker_available     – 1 if Docker socket is reachable, else 0
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	nodeCount := 0
+	nodesWithData := 0
+	totalSamples := 0
+	if globalStore != nil {
+		ids := globalStore.GetAllNodeIDs()
+		nodeCount = len(ids)
+		for _, id := range ids {
+			n := globalStore.SampleCount(id)
+			totalSamples += n
+			if n >= 4 {
+				nodesWithData++
+			}
+		}
+	}
+
+	dockerAvail := 0
+	if autodetect.IsDockerAvailable() {
+		dockerAvail = 1
+	}
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	fmt.Fprintf(w, "# HELP absia_nodes_total Number of distinct nodes in the metrics store\n")
+	fmt.Fprintf(w, "# TYPE absia_nodes_total gauge\n")
+	fmt.Fprintf(w, "absia_nodes_total %d\n", nodeCount)
+
+	fmt.Fprintf(w, "# HELP absia_nodes_with_data Nodes with enough samples to run the pipeline (>=4)\n")
+	fmt.Fprintf(w, "# TYPE absia_nodes_with_data gauge\n")
+	fmt.Fprintf(w, "absia_nodes_with_data %d\n", nodesWithData)
+
+	fmt.Fprintf(w, "# HELP absia_store_samples_total Total samples stored across all nodes\n")
+	fmt.Fprintf(w, "# TYPE absia_store_samples_total counter\n")
+	fmt.Fprintf(w, "absia_store_samples_total %d\n", totalSamples)
+
+	fmt.Fprintf(w, "# HELP absia_docker_available 1 if the Docker socket is reachable\n")
+	fmt.Fprintf(w, "# TYPE absia_docker_available gauge\n")
+	fmt.Fprintf(w, "absia_docker_available %d\n", dockerAvail)
+}
+
 // SetupRoutes registers all handler functions on the default ServeMux.
 func SetupRoutes(base *slog.Logger) {
 	mw := logger.Middleware(base)
@@ -1013,7 +1087,7 @@ func SetupRoutes(base *slog.Logger) {
 	http.Handle("/nodes", chain(NodesHandler))
 	http.Handle("/ingest", chainRL(IngestHandler))
 
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/metrics", chain(metricsHandler))
 	http.Handle("/analyze", chainRL(AnalyzeHandler))
 	http.Handle("/explain", chainRL(ExplainHandler))
 	http.Handle("/act", chainRL(ActHandler))

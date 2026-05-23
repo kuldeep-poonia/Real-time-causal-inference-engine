@@ -11,37 +11,52 @@ import (
 	"syscall"
 
 	"absia/pkg/api"
+	"absia/pkg/autodetect"
 	"absia/pkg/config"
 	"absia/pkg/logger"
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
 	"absia/pkg/policy"
-	"absia/pkg/realtime"
 )
 
 func main() {
 	cfg := config.Load()
 
-	// Structured logger — replaces bare log.Printf throughout main.
+	// ── Structured logger — must be initialised before anything else logs.
 	structLog := logger.New(cfg.LogLevel)
 	slog.SetDefault(structLog)
+
+	// ── Metrics store — must be initialised before autodetect goroutines
+	// so that PushContainerStatsToStore has a valid store reference.
+	store := metricsstore.New(60)
+
+	// ── Docker autodiscovery (plug-and-play, graceful degradation)
+	// Checks the Docker socket at startup; skips silently if absent.
+	if autodetect.IsDockerAvailable() {
+		structLog.Info("Docker socket detected — starting container autodiscovery and metrics collection")
+		bgCtx := context.Background()
+		go autodetect.StartContainerDiscovery(bgCtx, structLog)
+		go autodetect.PushContainerStatsToStore(bgCtx, store, structLog)
+	} else {
+		structLog.Warn("Docker socket not available — autodiscovery disabled; " +
+			"mount /var/run/docker.sock or push metrics manually via POST /ingest")
+	}
 
 	structLog.Info("ABSIA starting",
 		slog.String("version", "2.1.0"),
 		slog.String("log_level", cfg.LogLevel),
 		slog.Bool("auth_enabled", cfg.AuthEnabled()),
-		slog.Bool("prometheus_enabled", cfg.HasPrometheus()),
 		slog.Int64("seed", cfg.Seed),
 	)
 
 	if !cfg.AuthEnabled() {
-		structLog.Warn("API key authentication is disabled — set ABSIA_API_KEY to secure /act endpoint")
+		structLog.Warn("API key auth disabled — set ABSIA_API_KEY to protect the /act endpoint")
 	}
 
-	// ── Configure orchestrator package-level settings 
+	// ── Deterministic pipeline seed
 	orchestrator.SetSeed(cfg.Seed)
 
-	// ── Policy persistence store 
+	// ── Policy persistence store (optional; warm-starts RL policy between runs)
 	ps, err := policy.New(cfg.PolicyStorePath, structLog)
 	if err != nil {
 		structLog.Warn("policy store unavailable — policies will not persist between restarts",
@@ -53,8 +68,7 @@ func main() {
 		structLog.Info("policy store ready", slog.String("path", cfg.PolicyStorePath))
 	}
 
-	// ── Metrics store 
-	store := metricsstore.New(60)
+	// ── Wire the metrics store and configuration into the API layer
 	api.SetStore(store)
 	api.SetAPIKey(cfg.APIKey)
 	api.SetMaxBodyBytes(cfg.MaxBodyBytes)
@@ -70,23 +84,14 @@ func main() {
 		structLog.Warn("rate limiting disabled — set ABSIA_RATE_LIMIT_RPS to enable")
 	}
 
-	// ── Signal-aware root context for graceful shutdown 
-	// SIGTERM is the standard Kubernetes termination signal.
+	// ── Signal-aware root context for graceful shutdown.
+	// SIGTERM is the standard Kubernetes/Docker termination signal.
 	// SIGINT covers Ctrl-C in development.
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	// ── Prometheus poller 
-	if cfg.HasPrometheus() {
-		structLog.Info("Prometheus poller enabled", slog.String("url", cfg.PrometheusURL))
-		bridge := realtime.NewPollerBridge(cfg.PrometheusURL, store)
-		// Poller inherits rootCtx: SIGTERM cancels it cleanly.
-		go bridge.Start(rootCtx)
-	} else {
-		structLog.Warn("PROMETHEUS_URL not set — using synthetic data until /ingest receives >= 4 samples per node")
-	}
-
-	// ── Smoke test 
+	// ── Pipeline smoke-test: validates all 5 phases are wired correctly
+	// before accepting live traffic. Fast (~50ms); fails fast on misconfiguration.
 	structLog.Info("running pipeline smoke-test", slog.String("params", "arrival=10, service=8, queue=5"))
 	result, err := orchestrator.ExecuteFullPipeline(10.0, 8.0, 5.0)
 	if err != nil {
@@ -104,7 +109,7 @@ func main() {
 		)
 	}
 
-	// ── HTTP server 
+	// ── HTTP server
 	port := 8080
 	if p := os.Getenv("PORT"); p != "" {
 		if v, err := strconv.Atoi(p); err == nil && v > 0 {
@@ -124,6 +129,7 @@ func main() {
 		WriteTimeoutSeconds: cfg.WriteTimeoutSeconds,
 		IdleTimeoutSeconds:  cfg.IdleTimeoutSeconds,
 	}
+
 	// StartServer blocks until rootCtx is cancelled (SIGTERM/SIGINT), then
 	// drains in-flight requests before returning.
 	if err := api.StartServer(rootCtx, port, srvCfg); err != nil {
@@ -131,4 +137,3 @@ func main() {
 	}
 	structLog.Info("ABSIA shutdown complete")
 }
-
