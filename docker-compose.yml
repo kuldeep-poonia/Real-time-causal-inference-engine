@@ -1,35 +1,36 @@
-
 version: '3.8'
+
+
 services:
   absia:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: absia:latest
+    # To build locally instead:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8088:8080"
-    environment:
-      # API key is optional; only needed for /act endpoint
-      # ABSIA_API_KEY: "your-optional-api-key"
-      ABSIA_POLICY_STORE_PATH: /data/policies
-      ABSIA_METRICS_STORE_PATH: /data/metrics
-      PORT: "8080"
+      - "8080:8080"
     volumes:
-      - policy_data:/data/policies
-      - metrics_data:/data/metrics
+      #  Required: Docker socket for container autodiscovery 
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      #  Optional: persist RL policy weights between restarts 
+      # - policy_data:/data/policies
+    environment:
+      
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 5s
 
-  # Add your own services below. Example:
-  # myservice:
-  #   image: your-service-image
-  #   ...
+  #  Add your own services below. ABSIA discovers them automatically 
+  # example:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
 
-volumes:
-  policy_data:
-  metrics_data:
+# Uncomment to persist RL policy weights across restarts:
+# volumes:
+#   policy_data:
