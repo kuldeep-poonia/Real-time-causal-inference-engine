@@ -652,14 +652,19 @@ func GenerateExplanation(graph *CausalGraph, dataset *Dataset, target string) Ex
 	// Sort by descending absolute effect magnitude.
 	// Secondary key: node ID alphabetically — ensures a deterministic and
 	// stable order when two causes have identical effect magnitudes.
-	sort.Slice(arr, func(i, j int) bool {
-		ai := math.Abs(arr[i].v)
-		aj := math.Abs(arr[j].v)
-		if ai != aj {
-			return ai > aj
-		}
-		return arr[i].c < arr[j].c // stable tiebreaker: alphabetical ID
-	})
+	// Around lines 655-662, replace the sort comparator:
+sort.Slice(arr, func(i, j int) bool {
+	ai := math.Abs(arr[i].v)
+	aj := math.Abs(arr[j].v)
+	
+	// Use epsilon comparison for floating-point equality
+	epsilon := 1e-9
+	if math.Abs(ai-aj) < epsilon {
+		// Effects are effectively equal — use alphabetical tiebreaker
+		return arr[i].c < arr[j].c
+	}
+	return ai > aj // sort by descending magnitude
+})
 
 	causes := []string{}
 	for _, p := range arr {
