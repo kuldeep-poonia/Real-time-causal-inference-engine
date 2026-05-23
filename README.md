@@ -49,7 +49,7 @@ Create a `docker-compose.yml` in your project:
 ```yaml
 services:
   absia:
-    image: yourdockerhub/absia:latest
+    image: poonia98/absia:latest
     ports:
       - "8080:8080"
     volumes:
