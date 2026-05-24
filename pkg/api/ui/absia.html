@@ -3,1632 +3,1514 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ABSIA Control Plane</title>
+<title>ABSIA</title>
 <link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ── Reset + tokens ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
-  --bg: #0b0d10;
-  --rail: #0f1318;
-  --surface: #131820;
-  --panel: #171d25;
-  --panel-2: #1d242d;
-  --panel-3: #222a34;
-  --border: #2a3440;
-  --border-soft: rgba(255, 255, 255, 0.07);
-  --text: #f0f4f8;
-  --muted: #9aa7b5;
-  --dim: #657383;
-  --ok: #32d6a6;
-  --ok-soft: rgba(50, 214, 166, 0.13);
-  --ok-border: rgba(50, 214, 166, 0.35);
-  --warn: #f4b85f;
-  --warn-soft: rgba(244, 184, 95, 0.14);
-  --warn-border: rgba(244, 184, 95, 0.34);
-  --bad: #ff6b6b;
-  --bad-soft: rgba(255, 107, 107, 0.14);
-  --bad-border: rgba(255, 107, 107, 0.36);
-  --info: #69b7ff;
-  --info-soft: rgba(105, 183, 255, 0.13);
-  --info-border: rgba(105, 183, 255, 0.32);
-  --violet: #b28cff;
-  --violet-soft: rgba(178, 140, 255, 0.12);
-  --shadow: 0 16px 50px rgba(0, 0, 0, 0.28);
+  --bg:        #05080D;
+  --bg1:       #090D14;
+  --bg2:       #0E1520;
+  --bg3:       #131C2B;
+  --bg4:       #192234;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.12);
+  --text:      #E8EFF8;
+  --muted:     #7A8FA8;
+  --dim:       #44566A;
+
+  --teal:      #00D4AA;
+  --teal-dim:  rgba(0,212,170,0.10);
+  --teal-bd:   rgba(0,212,170,0.25);
+
+  --amber:     #F59E0B;
+  --amber-dim: rgba(245,158,11,0.10);
+  --amber-bd:  rgba(245,158,11,0.28);
+
+  --red:       #F05252;
+  --red-dim:   rgba(240,82,82,0.10);
+  --red-bd:    rgba(240,82,82,0.28);
+
+  --blue:      #60A5FA;
+  --blue-dim:  rgba(96,165,250,0.10);
+  --blue-bd:   rgba(96,165,250,0.25);
+
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#app {
-  min-height: 100%;
-}
-
+html, body { height: 100%; }
 body {
-  margin: 0;
-  background:
-    linear-gradient(180deg, rgba(105, 183, 255, 0.06), transparent 320px),
-    var(--bg);
+  font-family: var(--sans);
+  background: var(--bg);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
-  letter-spacing: 0;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-select {
-  font: inherit;
-  letter-spacing: 0;
+/* ── Scrollbar ───────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+
+/* ── Animations ──────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+@keyframes slidein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+@keyframes dot-pulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.6); opacity: 0.6; }
 }
 
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #27323d;
-  border-radius: 999px;
-  border: 3px solid transparent;
-  background-clip: content-box;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
-}
-
-@keyframes enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.app {
-  min-height: 100vh;
+/* ── Layout shell ────────────────────────────────────────────────── */
+.shell {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-rows: 56px 1fr;
+  min-height: 100vh;
 }
 
-.rail {
+/* ── Header ──────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
   position: sticky;
   top: 0;
-  height: 100vh;
-  background: rgba(15, 19, 24, 0.92);
-  border-right: 1px solid var(--border-soft);
+  z-index: 50;
+}
+
+.logo {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 16px 10px;
-  gap: 16px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-.brand-mark {
-  width: 40px;
-  height: 40px;
+.logo-mark {
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--ok), var(--info) 58%, var(--violet));
-  color: #07100d;
-  display: grid;
-  place-items: center;
-  font-weight: 900;
-  box-shadow: 0 12px 32px rgba(50, 214, 166, 0.2);
-}
-
-.rail-link {
-  width: 42px;
-  height: 42px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--dim);
-  display: grid;
-  place-items: center;
-  text-decoration: none;
-  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
-}
-
-.rail-link:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--border);
-}
-
-.main {
-  min-width: 0;
-  padding: 22px;
-}
-
-.topbar {
+  background: linear-gradient(135deg, var(--teal), #0095CC);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 13px;
+  color: #000;
+  letter-spacing: -0.5px;
 }
 
-.eyebrow {
-  color: var(--info);
+.logo-text {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.logo-tag {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.header-sep { flex: 1; }
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--muted);
+}
+
+.badge.live   { border-color: var(--teal-bd); background: var(--teal-dim); color: var(--teal); }
+.badge.warn   { border-color: var(--amber-bd); background: var(--amber-dim); color: var(--amber); }
+.badge.dead   { border-color: var(--red-bd); background: var(--red-dim); color: var(--red); }
+
+.live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+.icon-btn {
+  width: 32px; height: 32px;
+  border-radius: 7px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.icon-btn:hover { border-color: var(--teal-bd); color: var(--teal); background: var(--teal-dim); }
+.icon-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── Main canvas ─────────────────────────────────────────────────── */
+.canvas {
+  display: grid;
+  grid-template-columns: 340px 1fr 360px;
+  overflow: hidden;
+  height: calc(100vh - 56px);
+}
+
+/* ── Shared panel styles ─────────────────────────────────────────── */
+.col {
+  overflow-y: auto;
+  height: 100%;
+  border-right: 1px solid var(--border);
+}
+.col:last-child { border-right: 0; }
+
+.col-head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.col-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.col-sub {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ── KPI strip ───────────────────────────────────────────────────── */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+}
+
+.kpi-tile {
+  padding: 16px 22px;
+  border-right: 1px solid var(--border);
+  animation: slidein .3s ease both;
+}
+.kpi-tile:last-child { border-right: 0; }
+.kpi-tile:nth-child(2) { animation-delay: .05s; }
+.kpi-tile:nth-child(3) { animation-delay: .10s; }
+.kpi-tile:nth-child(4) { animation-delay: .15s; }
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
   margin-bottom: 6px;
 }
 
-h1 {
-  margin: 0;
-  font-size: clamp(24px, 4vw, 38px);
-  line-height: 1.05;
-  font-weight: 760;
-}
-
-.subtitle {
-  margin-top: 9px;
-  max-width: 760px;
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.top-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.chip {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.chip.ok {
-  color: var(--ok);
-  border-color: var(--ok-border);
-  background: var(--ok-soft);
-}
-
-.chip.warn {
-  color: var(--warn);
-  border-color: var(--warn-border);
-  background: var(--warn-soft);
-}
-
-.chip.bad {
-  color: var(--bad);
-  border-color: var(--bad-border);
-  background: var(--bad-soft);
-}
-
-.chip.info {
-  color: var(--info);
-  border-color: var(--info-border);
-  background: var(--info-soft);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: currentColor;
-  flex: 0 0 auto;
-}
-
-.live .dot {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.btn,
-.icon-btn {
-  border: 1px solid var(--border);
-  background: var(--panel-2);
+.kpi-value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
   color: var(--text);
-  border-radius: 8px;
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: transform 120ms ease, border-color 150ms ease, background 150ms ease, color 150ms ease;
+  margin-bottom: 4px;
+}
+.kpi-value.teal  { color: var(--teal); }
+.kpi-value.amber { color: var(--amber); }
+.kpi-value.red   { color: var(--red); }
+.kpi-value.blue  { color: var(--blue); }
+
+.kpi-foot {
+  font-size: 12px;
+  color: var(--dim);
 }
 
-.btn {
-  padding: 8px 13px;
-  font-weight: 720;
-  white-space: nowrap;
-}
-
-.icon-btn {
-  width: 38px;
-  padding: 0;
-}
-
-.btn:hover,
-.icon-btn:hover {
-  border-color: #405060;
-  background: #242d38;
-}
-
-.btn:active,
-.icon-btn:active {
-  transform: translateY(1px);
-}
-
-.btn.primary {
-  background: linear-gradient(135deg, var(--ok), #5ce0bf);
-  color: #061410;
-  border-color: transparent;
-}
-
-.btn.primary:hover {
-  background: linear-gradient(135deg, #45e0b2, #8be9d0);
-}
-
-.btn.ghost {
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--muted);
-}
-
-.btn.warn {
-  background: var(--warn-soft);
-  color: var(--warn);
-  border-color: var(--warn-border);
-}
-
-.btn:disabled {
-  opacity: 0.48;
-}
-
-.icon {
-  width: 18px;
-  height: 18px;
-  stroke: currentColor;
-  stroke-width: 2;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex: 0 0 auto;
-}
-
-.grid-kpis {
+/* ── Full layout with KPI strip ──────────────────────────────────── */
+.page {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  grid-template-rows: auto 1fr;
+  height: calc(100vh - 56px);
+  overflow: hidden;
 }
 
-.kpi {
-  min-height: 112px;
-  background: rgba(23, 29, 37, 0.86);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: var(--shadow);
-  animation: enter 250ms ease both;
+.body-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr 360px;
+  overflow: hidden;
+  height: 100%;
 }
 
-.kpi-label {
+/* ── Service cards (left col) ────────────────────────────────────── */
+.services-col {
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+
+.col-hd {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  color: var(--muted);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.col-hd-title { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.count-badge { font-family: var(--mono); font-size: 11px; color: var(--dim); background: var(--bg3); padding: 2px 8px; border-radius: 10px; }
+
+.service-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.service-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  text-align: left;
+  width: 100%;
+  animation: slidein .25s ease both;
+  position: relative;
+  overflow: hidden;
+}
+.service-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background: var(--dim);
+  transition: background .15s;
+}
+.service-card.ok::before     { background: var(--teal); }
+.service-card.watch::before  { background: var(--blue); }
+.service-card.pressure::before { background: var(--amber); }
+.service-card.overloaded::before { background: var(--red); }
+
+.service-card:hover { border-color: var(--border2); background: var(--bg3); }
+.service-card.active { border-color: var(--border2); background: var(--bg3); }
+
+.sc-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.sc-name { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.2; }
+.sc-id   { font-size: 11px; font-family: var(--mono); color: var(--dim); margin-top: 2px; }
+
+.sc-pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.sc-pill.ok       { background: var(--teal-dim); color: var(--teal); border: 1px solid var(--teal-bd); }
+.sc-pill.watch    { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue-bd); }
+.sc-pill.pressure { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-bd); }
+.sc-pill.overloaded { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-bd); }
+
+.sc-sentence {
   font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+.sc-sentence strong { color: var(--text); font-weight: 500; }
+
+.sc-bar-wrap { margin-bottom: 6px; }
+.sc-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+.sc-bar { height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+.sc-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
+.sc-bar-fill.ok       { background: var(--teal); }
+.sc-bar-fill.watch    { background: var(--blue); }
+.sc-bar-fill.pressure { background: var(--amber); }
+.sc-bar-fill.overloaded { background: var(--red); }
+
+.sc-stats { display: flex; gap: 14px; }
+.sc-stat { }
+.sc-stat-val { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
+.sc-stat-key { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+
+/* ── Middle col — command + analysis ────────────────────────────── */
+.middle-col {
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Selected service detail ─────────────────────────────────────── */
+.detail-header {
+  padding: 20px 24px 18px;
+  border-bottom: 1px solid var(--border);
+  animation: slidein .2s ease;
+}
+
+.detail-name { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.detail-id   { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-bottom: 14px; }
+
+.detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-radius: 8px;
+  overflow: hidden;
   margin-bottom: 16px;
 }
 
-.kpi-value {
-  font-size: 30px;
-  line-height: 1;
-  font-weight: 780;
-  overflow-wrap: anywhere;
+.dm-cell {
+  background: var(--bg2);
+  padding: 12px 14px;
 }
+.dm-val { font-family: var(--mono); font-size: 18px; font-weight: 600; color: var(--text); }
+.dm-val.teal  { color: var(--teal); }
+.dm-val.amber { color: var(--amber); }
+.dm-val.red   { color: var(--red); }
+.dm-key { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-.kpi-foot {
-  margin-top: 8px;
-  color: var(--dim);
-  font-size: 12px;
-  min-height: 17px;
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(460px, 1.55fr) minmax(320px, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.panel {
-  background: rgba(23, 29, 37, 0.9);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
-.panel-head {
-  min-height: 54px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-weight: 760;
-}
-
-.panel-body {
-  padding: 16px;
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.section-label {
+.detail-sentence {
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.input,
-.select {
-  width: 100%;
-  min-height: 40px;
-  color: var(--text);
-  background: var(--panel-2);
+  padding: 12px 14px;
+  background: var(--bg2);
+  border-radius: 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  outline: 0;
 }
+.detail-sentence strong { color: var(--text); }
 
-.input:focus,
-.select:focus {
-  border-color: var(--info);
-}
-
-.field {
+/* ── Actions strip ───────────────────────────────────────────────── */
+.actions-strip {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.field label {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 680;
-}
-
-.command-buttons {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 9px;
-}
-
-.phase-list {
-  display: grid;
   gap: 8px;
-}
-
-.phase {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 9px;
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  color: var(--muted);
+  flex-wrap: wrap;
 }
 
-.phase-num {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  color: var(--dim);
-  font-size: 12px;
-  font-weight: 780;
-}
-
-.phase.active {
-  color: var(--text);
-  border-color: var(--info-border);
-  background: var(--info-soft);
-}
-
-.phase.active .phase-num {
-  color: var(--info);
-  border-color: var(--info-border);
-}
-
-.phase.done {
-  color: var(--text);
-  background: var(--ok-soft);
-  border-color: var(--ok-border);
-}
-
-.phase.done .phase-num {
-  color: var(--ok);
-  border-color: var(--ok-border);
-}
-
-.node-map {
-  min-height: 390px;
-}
-
-.map-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
-  gap: 10px;
-}
-
-.node-card {
-  position: relative;
-  min-height: 150px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  padding: 13px;
-  text-align: left;
-  color: inherit;
-  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
-}
-
-.node-card:hover {
-  transform: translateY(-2px);
-  border-color: #405060;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.node-card.selected {
-  border-color: var(--info);
-  box-shadow: inset 0 0 0 1px rgba(105, 183, 255, 0.24);
-}
-
-.node-name {
-  font-weight: 760;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-  padding-right: 28px;
-}
-
-.node-id {
-  color: var(--dim);
-  font-size: 12px;
-  margin-top: 4px;
-  overflow-wrap: anywhere;
-}
-
-.node-load {
-  margin: 14px 0 10px;
-}
-
-.bar {
-  width: 100%;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  overflow: hidden;
-}
-
-.bar > span {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: 999px;
-  background: var(--ok);
-  transition: width 350ms ease;
-}
-
-.bar.ok > span { background: var(--ok); }
-.bar.info > span { background: var(--info); }
-.bar.watch > span { background: var(--info); }
-.bar.pressure > span { background: var(--warn); }
-.bar.overloaded > span { background: var(--bad); }
-
-.node-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.state-pill {
+.btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border-radius: 999px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.035);
-  font-size: 12px;
-  font-weight: 720;
-  white-space: nowrap;
-}
-
-.state-pill.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
-.state-pill.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
-.state-pill.bad { color: var(--bad); border-color: var(--bad-border); background: var(--bad-soft); }
-.state-pill.info { color: var(--info); border-color: var(--info-border); background: var(--info-soft); }
-.state-pill.watch { color: var(--info); border-color: var(--info-border); background: var(--info-soft); }
-.state-pill.pressure { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
-.state-pill.overloaded { color: var(--bad); border-color: var(--bad-border); background: var(--bad-soft); }
-
-.empty {
-  min-height: 320px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  color: var(--muted);
-  padding: 28px;
-}
-
-.empty h2 {
-  color: var(--text);
-  margin: 10px 0 6px;
-  font-size: 19px;
-}
-
-.empty p {
-  max-width: 420px;
-  margin: 0 auto 18px;
-  line-height: 1.65;
-}
-
-.result-hero {
+  padding: 8px 16px;
   border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-  padding: 14px;
-}
-
-.result-title {
-  font-size: 24px;
-  line-height: 1.1;
-  font-weight: 800;
-  margin-bottom: 8px;
-  overflow-wrap: anywhere;
-}
-
-.result-copy {
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.result-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.mini-stat {
-  padding: 11px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.mini-stat .label {
-  color: var(--dim);
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.mini-stat .value {
-  font-size: 18px;
-  font-weight: 780;
-  overflow-wrap: anywhere;
-}
-
-.evidence-list {
-  display: grid;
-  gap: 9px;
-}
-
-.evidence-row {
-  display: grid;
-  grid-template-columns: minmax(96px, 1fr) 96px;
-  gap: 10px;
-  align-items: center;
-}
-
-.evidence-name {
+  font-family: var(--sans);
   font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  transition: all .15s;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:not(:disabled):hover { border-color: var(--border2); background: var(--bg3); }
+
+.btn.primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #000;
+  font-weight: 600;
+}
+.btn.primary:not(:disabled):hover { filter: brightness(1.1); }
+
+.btn.danger {
+  border-color: var(--amber-bd);
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+.btn.danger:not(:disabled):hover { border-color: var(--amber); }
+
+.btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn.primary svg { stroke: #000; }
+
+.spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: #000; border-radius: 50%; animation: spin 700ms linear infinite; flex-shrink: 0; }
+.spinner.light { border-color: rgba(255,255,255,.15); border-top-color: var(--muted); }
+
+/* ── Pipeline track ──────────────────────────────────────────────── */
+.pipeline-track {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 
-.evidence-score {
-  color: var(--muted);
-  font-size: 12px;
-  text-align: right;
+.pt-step {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
-.notice {
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--muted);
-  border-radius: 8px;
-  line-height: 1.55;
-}
-
-.notice.bad {
-  color: var(--bad);
-  border-color: var(--bad-border);
-  background: var(--bad-soft);
-}
-
-.notice.warn {
-  color: var(--warn);
-  border-color: var(--warn-border);
-  background: var(--warn-soft);
-}
-
-.table-panel {
-  margin-top: 14px;
-}
-
-.table-wrap {
-  overflow: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 780px;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-soft);
-}
-
-th {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 760;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-td {
-  color: var(--text);
-  vertical-align: middle;
-}
-
-tr:last-child td {
-  border-bottom: 0;
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.dim {
+.pt-node {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border2);
+  background: var(--bg3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
   color: var(--dim);
+  flex-shrink: 0;
+  transition: all .2s;
+  position: relative;
+  z-index: 1;
+}
+.pt-node.done   { background: var(--teal); border-color: var(--teal); color: #000; }
+.pt-node.active { background: var(--bg3); border-color: var(--teal); color: var(--teal); animation: pulse 1s ease-in-out infinite; }
+
+.pt-line { flex: 1; height: 1.5px; background: var(--border2); transition: background .2s; }
+.pt-line.done { background: var(--teal); }
+
+.pt-labels {
+  display: flex;
+  padding: 6px 24px 0;
+  gap: 0;
+}
+.pt-label {
+  flex: 1;
+  font-size: 10px;
+  color: var(--dim);
+  text-align: center;
+  transition: color .2s;
+  line-height: 1.3;
+}
+.pt-label.active { color: var(--teal); }
+.pt-label.done   { color: var(--muted); }
+
+/* ── Analysis result ─────────────────────────────────────────────── */
+.result-area {
+  flex: 1;
+  padding: 20px 24px;
+  animation: slidein .25s ease;
 }
 
-.spinner {
-  width: 17px;
-  height: 17px;
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  border-top-color: currentColor;
-  border-radius: 999px;
-  animation: spin 720ms linear infinite;
+.result-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 200px;
+  color: var(--muted);
 }
+.result-empty .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: .4; }
+.result-empty h3 { font-size: 15px; color: var(--text); margin-bottom: 6px; }
+.result-empty p  { font-size: 13px; max-width: 300px; line-height: 1.6; }
 
-.history {
+.result-story {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+.result-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.verdict-pill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.verdict-pill.ok   { background: var(--teal-dim); color: var(--teal); border: 1px solid var(--teal-bd); }
+.verdict-pill.warn { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-bd); }
+.verdict-pill.bad  { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-bd); }
+
+.result-headline {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.25;
+  margin-bottom: 10px;
+}
+.result-headline span { color: var(--teal); }
+
+.result-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.result-body strong { color: var(--text); font-weight: 500; }
+
+.result-stats {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 16px;
 }
 
-.history-row {
-  border: 1px solid var(--border-soft);
+.rstat {
+  background: var(--bg3);
   border-radius: 8px;
-  padding: 10px;
-  display: grid;
-  gap: 4px;
+  padding: 12px;
+}
+.rstat-val { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text); }
+.rstat-key { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
+/* ── Impact list ─────────────────────────────────────────────────── */
+.impact-section { margin-bottom: 14px; }
+.section-label { font-size: 11px; font-weight: 600; letter-spacing: .10em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
+
+.impact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.impact-row:last-child { border-bottom: 0; }
+
+.impact-name { font-size: 13px; color: var(--text); font-weight: 500; min-width: 110px; }
+.impact-bar-wrap { flex: 1; }
+.impact-bar { height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.impact-bar-fill { height: 100%; border-radius: 3px; background: var(--teal); opacity: .8; transition: width .4s ease; }
+.impact-score { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 44px; text-align: right; }
+
+/* ── Error / safety blocked ──────────────────────────────────────── */
+.alert-box {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+.alert-box.err  { background: var(--red-dim); border: 1px solid var(--red-bd); color: var(--red); }
+.alert-box.warn { background: var(--amber-dim); border: 1px solid var(--amber-bd); color: var(--amber); }
+.alert-box.info { background: var(--blue-dim); border: 1px solid var(--blue-bd); color: var(--blue); }
+.alert-box strong { font-weight: 600; }
+
+/* ── Right col — actions + settings ─────────────────────────────── */
+.right-col {
+  overflow-y: auto;
 }
 
-.history-row strong {
-  overflow-wrap: anywhere;
+/* ── Action policy section ───────────────────────────────────────── */
+.r-section {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
 }
 
-@media (max-width: 1180px) {
-  .workspace {
-    grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
-  }
-  .insight {
-    grid-column: 1 / -1;
-  }
-  .grid-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.r-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
 }
 
-@media (max-width: 760px) {
-  .app {
-    grid-template-columns: 1fr;
-  }
-  .rail {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    justify-content: space-between;
-    padding: 10px 12px;
-  }
-  .rail-link {
-    width: 38px;
-    height: 38px;
-  }
-  .main {
-    padding: 14px;
-  }
-  .topbar {
-    flex-direction: column;
-  }
-  .top-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .grid-kpis,
-  .workspace,
-  .result-grid {
-    grid-template-columns: 1fr;
-  }
-  .panel-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .btn {
-    width: 100%;
-  }
+.action-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 14px;
+  margin-bottom: 8px;
+  animation: slidein .2s ease both;
+}
+.ac-rank { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.ac-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.ac-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.ac-bar  { height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+.ac-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), #0095CC); border-radius: 2px; }
+
+/* ── History ─────────────────────────────────────────────────────── */
+.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  background: var(--bg2);
+  border-radius: 7px;
+  border: 1px solid var(--border);
+}
+.hi-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hi-dot.ok   { background: var(--teal); }
+.hi-dot.warn { background: var(--amber); }
+.hi-dot.bad  { background: var(--red); }
+.hi-body { flex: 1; min-width: 0; }
+.hi-root { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hi-meta { font-size: 11px; color: var(--dim); }
+
+/* ── API key field ───────────────────────────────────────────────── */
+.field-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+.field-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+.field-input:focus { border-color: var(--teal-bd); }
+.field-input::placeholder { color: var(--dim); }
+
+/* ── Empty states ────────────────────────────────────────────────── */
+.empty-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--muted);
+  height: 100%;
+}
+.empty-col h3 { font-size: 15px; color: var(--text); margin: 12px 0 6px; }
+.empty-col p  { font-size: 13px; line-height: 1.65; max-width: 260px; }
+
+.empty-icon-lg {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.empty-icon-lg svg { width: 24px; height: 24px; fill: none; stroke: var(--dim); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── Node select dropdown ────────────────────────────────────────── */
+.node-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .body-grid { grid-template-columns: 300px 1fr; }
+  .right-col { display: none; }
+  .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 720px) {
+  .body-grid { grid-template-columns: 1fr; }
+  .services-col { display: none; }
+  .kpi-strip { grid-template-columns: 1fr 1fr; }
 }
 </style>
 </head>
 <body>
 <div id="app"></div>
+
 <script>
 (function () {
   "use strict";
 
-  var state = {
-    health: null,
-    nodes: [],
-    selected: "",
-    analysis: null,
-    explanation: null,
-    actions: null,
-    error: "",
-    busy: "",
-    phase: -1,
+  /* ── State ───────────────────────────────────────────────────── */
+  var S = {
+    health:      null,
+    nodes:       [],
+    selected:    "",
+    result:      null,   // merged output from /analyze + /act
+    error:       "",
+    busy:        "",
+    phase:       -1,
     lastUpdated: null,
-    apiKey: localStorage.getItem("absia_api_key") || "",
-    history: readJSON("absia_control_history", [])
+    apiError:    false,
+    apiKey:      localStorage.getItem("absia_api_key") || "",
+    history:     readJSON("absia_history", [])
   };
 
-  var phaseTimer = null;
+  var phaseTimer   = null;
   var refreshTimer = null;
 
-  var phases = [
-    "Signal physics",
-    "Pattern intelligence",
-    "Causal graph",
-    "Explanation",
-    "Policy and safety"
+  /* ── Pipeline phase labels (human, not technical) ────────────── */
+  var PHASES = [
+    { short: "Traffic",  long: "Reading traffic patterns" },
+    { short: "Patterns", long: "Detecting anomalies"      },
+    { short: "Causes",   long: "Mapping cause & effect"   },
+    { short: "Evidence", long: "Building explanation"     },
+    { short: "Decision", long: "Safety check & ranking"   }
   ];
 
-  var icons = {
-    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>',
-    refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2"></path><path d="M3 17v5h5"></path><path d="M3 12A9 9 0 0 1 18.5 5.8"></path><path d="M21 7V2h-5"></path>',
-    play: '<polygon points="8 5 19 12 8 19 8 5"></polygon>',
-    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
-    target: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle>',
-    database: '<ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>',
-    key: '<circle cx="7.5" cy="15.5" r="5.5"></circle><path d="M12 11l9-9"></path><path d="M17 6l2 2"></path>',
-    alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path>',
-    check: '<path d="M20 6 9 17l-5-5"></path>',
-    bolt: '<path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"></path>',
-    graph: '<circle cx="6" cy="7" r="3"></circle><circle cx="18" cy="7" r="3"></circle><circle cx="12" cy="18" r="3"></circle><path d="M8.8 8.5 10.7 15"></path><path d="M15.2 8.5 13.3 15"></path><path d="M9 7h6"></path>',
-    spark: '<path d="M12 2v6"></path><path d="M12 16v6"></path><path d="M4.9 4.9l4.2 4.2"></path><path d="M14.9 14.9l4.2 4.2"></path><path d="M2 12h6"></path><path d="M16 12h6"></path><path d="M4.9 19.1l4.2-4.2"></path><path d="M14.9 9.1l4.2-4.2"></path>'
-  };
-
-  function icon(name) {
-    return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + (icons[name] || icons.activity) + '</svg>';
+  /* ── Plain-English helpers ───────────────────────────────────── */
+  function friendlyName(id) {
+    var v = String(id || "service");
+    var l = v.toLowerCase();
+    if (/^db$|database|postgres|mysql|mongo|redis|dynamo|cassandra/.test(l)) return "Database";
+    if (/auth|identity|login|session|oauth|jwt/.test(l))                      return "Auth Service";
+    if (/gateway|edge|ingress|proxy|nginx|haproxy|traefik|lb/.test(l))        return "API Gateway";
+    if (/cache|memcache/.test(l))                                             return "Cache Layer";
+    if (/queue|kafka|rabbit|rmq|worker|job|celery|sidekiq/.test(l))           return "Queue Worker";
+    if (/search|elastic|solr/.test(l))                                        return "Search Service";
+    if (/mailer|email|smtp|sendgrid/.test(l))                                 return "Mail Service";
+    if (/payment|stripe|billing/.test(l))                                     return "Payment Service";
+    return v.replace(/[-_:.]+/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase(); });
   }
 
-  function readJSON(key, fallback) {
-    try {
-      var raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (err) {
-      return fallback;
+  function statusKey(node) {
+    var s = node && node.status ? node.status : "healthy";
+    if (s === "healthy")    return { key: "ok",         label: "Healthy",      score: 0 };
+    if (s === "watch")      return { key: "watch",      label: "Watch",        score: 1 };
+    if (s === "pressure")   return { key: "pressure",   label: "High load",    score: 2 };
+    return                         { key: "overloaded", label: "Overloaded",   score: 3 };
+  }
+
+  function sentenceForNode(node) {
+    if (!node) return "";
+    var load    = node.load || 0;
+    var qlen    = Math.round(node.queue_length || 0);
+    var arrival = Math.round(node.arrival_rate || 0);
+    var cap     = Math.round(node.service_rate || 0);
+    var name    = friendlyName(node.node_id);
+    var s       = statusKey(node);
+
+    if (s.key === "ok")
+      return "Handling traffic well — processing " + arrival + " req/s with capacity to spare.";
+    if (s.key === "watch")
+      return "Running at " + Math.round(load * 100) + "% of capacity. Worth monitoring but not critical.";
+    if (s.key === "pressure")
+      return "Under pressure. Receiving " + arrival + " req/s but capacity is " + cap + ". " + (qlen > 0 ? qlen + " requests waiting." : "");
+    return "Can't keep up with demand. " + arrival + " req/s in, only " + cap + " capacity. " + (qlen > 0 ? qlen + " requests stuck in queue." : "Backlog growing.");
+  }
+
+  function confMeta(result) {
+    var r  = result || {};
+    var cs = r.confidence_state || "UNKNOWN";
+    if (cs === "CONFIRMED") return { key: "ok",   label: "High confidence" };
+    if (cs === "PROBABLE")  return { key: "warn", label: "Probable"        };
+    return                         { key: "bad",  label: "Not confident"   };
+  }
+
+  function analysisHeadline(result) {
+    if (!result) return "";
+    var root  = result.root_cause || result.physics_root_cause;
+    var name  = root ? friendlyName(root) : null;
+    var cs    = (result.confidence_state || "UNKNOWN");
+    if (!name) return "No clear root cause found";
+    if (cs === "CONFIRMED") return name + " is causing the problem";
+    if (cs === "PROBABLE")  return name + " is the likely cause";
+    return "Root cause unclear — more data needed";
+  }
+
+  function analysisStory(result) {
+    if (!result) return "";
+    var root  = result.root_cause || result.physics_root_cause;
+    var name  = root ? friendlyName(root) : null;
+    var score = Math.round((result.confidence_score || 0) * 100);
+    var risk  = result.latent_risk || "UNKNOWN";
+    var node  = S.nodes.find(function(n){ return n.node_id === root; });
+    var cs    = result.confidence_state || "UNKNOWN";
+
+    if (!name) {
+      return "ABSIA ran the full analysis but couldn't find a stable root cause. This usually means more data is needed — wait for at least 4 metric samples per service, then run again.";
     }
-  }
 
-  function writeJSON(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
-  }
+    var parts = [];
 
-  function escapeHTML(value) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
+    if (cs === "CONFIRMED") {
+      parts.push("<strong>" + name + "</strong> is the most likely source of the incident with " + score + "% confidence.");
+    } else if (cs === "PROBABLE") {
+      parts.push("<strong>" + name + "</strong> is the probable source of the incident (" + score + "% confidence), but certainty isn't high enough for automated action.");
+    } else {
+      parts.push("The analysis completed but confidence is too low to name a cause safely. ABSIA will not guess.");
+    }
 
-  function fmt(value, digits) {
-    if (value == null || value === "" || !isFinite(value)) return "-";
-    return Number(value).toLocaleString(undefined, {
-      maximumFractionDigits: digits == null ? 1 : digits
-    });
-  }
-
-  function pct(value) {
-    if (value == null || !isFinite(value)) return "0%";
-    return Math.round(value * 100) + "%";
-  }
-
-  function statusForNode(node) {
-    var status = node && node.status ? node.status : "healthy";
-    if (status === "healthy") return { key: "ok", label: "Healthy", score: 0 };
-    if (status === "watch") return { key: "watch", label: "Watch", score: 1 };
-    if (status === "pressure") return { key: "pressure", label: "Pressure", score: 2 };
-    return { key: "overloaded", label: "Overloaded", score: 3 };
-  }
-
-  function safetyMeta(safety) {
-    var stateName = (safety && safety.confidence_state) || (state.analysis && state.analysis.confidence_state) || "UNKNOWN";
-    if (stateName === "CONFIRMED") return { key: "ok", label: "Confirmed" };
-    if (stateName === "PROBABLE") return { key: "warn", label: "Probable" };
-    return { key: "bad", label: "Unknown" };
-  }
-
-  function nameFor(id) {
-    var value = String(id || "primary");
-    var lower = value.toLowerCase();
-    if (/db|database|postgres|mysql|mongo/.test(lower)) return "Database";
-    if (/auth|identity|login|session/.test(lower)) return "Auth service";
-    if (/gateway|edge|ingress|proxy|lb/.test(lower)) return "Gateway";
-    if (/cache|redis|memcache/.test(lower)) return "Cache";
-    if (/queue|kafka|rabbit|worker|job/.test(lower)) return "Queue worker";
-    return value.replace(/[-_]+/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
-  }
-
-  function relativeTime(iso) {
-    if (!iso) return "-";
-    var ms = Date.now() - new Date(iso).getTime();
-    if (!isFinite(ms)) return "-";
-    var seconds = Math.max(0, Math.round(ms / 1000));
-    if (seconds < 60) return "just now";
-    if (seconds < 3600) return Math.round(seconds / 60) + " min ago";
-    if (seconds < 86400) return Math.round(seconds / 3600) + " hr ago";
-    return Math.round(seconds / 86400) + " d ago";
-  }
-
-  function demoNodes() {
-    return [
-      {
-        node_id: "api-gateway",
-        arrival_rate: 145.2,
-        service_rate: 120.0,
-        queue_length: 8,
-        load: 0.68,
-        status: "watch",
-        sample_count: 24,
-        last_seen: new Date(Date.now() - 3000).toISOString(),
-        pipeline_ready: true
-      },
-      {
-        node_id: "database",
-        arrival_rate: 142.8,
-        service_rate: 95.0,
-        queue_length: 18,
-        load: 0.82,
-        status: "pressure",
-        sample_count: 21,
-        last_seen: new Date(Date.now() - 2000).toISOString(),
-        pipeline_ready: true
-      },
-      {
-        node_id: "cache",
-        arrival_rate: 88.5,
-        service_rate: 150.0,
-        queue_length: 2,
-        load: 0.41,
-        status: "healthy",
-        sample_count: 19,
-        last_seen: new Date(Date.now() - 1500).toISOString(),
-        pipeline_ready: true
-      },
-      {
-        node_id: "worker-queue",
-        arrival_rate: 52.3,
-        service_rate: 60.0,
-        queue_length: 5,
-        load: 0.48,
-        status: "healthy",
-        sample_count: 18,
-        last_seen: new Date(Date.now() - 4000).toISOString(),
-        pipeline_ready: true
+    if (node) {
+      var arr = Math.round(node.arrival_rate || 0);
+      var cap = Math.round(node.service_rate || 0);
+      if (arr > 0 && cap > 0) {
+        if (arr > cap) {
+          parts.push("It's receiving <strong>" + arr + " req/s</strong> but can only handle <strong>" + cap + " req/s</strong> — " + Math.round(((arr-cap)/cap)*100) + "% over capacity.");
+        } else {
+          parts.push("It's currently processing <strong>" + arr + " req/s</strong> against a capacity of <strong>" + cap + " req/s</strong>.");
+        }
       }
-    ];
+    }
+
+    if (risk === "HIGH") {
+      parts.push("A <strong>hidden cause</strong> is suspected — something upstream may not be visible in current metrics.");
+    } else if (risk === "MEDIUM") {
+      parts.push("Moderate risk of a hidden dependency contributing to this issue.");
+    }
+
+    var fb = result.fallback_triggered;
+    if (fb) {
+      parts.push("The safety gate <strong>blocked automated action</strong> — confidence isn't high enough to recommend changes automatically.");
+    }
+
+    return parts.join(" ");
   }
 
+  /* ── Utilities ───────────────────────────────────────────────── */
+  function esc(v) {
+    return String(v == null ? "" : v)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+  }
+  function fmt(v, d) {
+    if (v == null || !isFinite(v)) return "—";
+    return Number(v).toLocaleString(undefined, { maximumFractionDigits: d == null ? 1 : d });
+  }
+  function pct(v)   { return isFinite(v) ? Math.round(v * 100) + "%" : "—"; }
+  function clamp(v) { return Math.min(100, Math.max(0, Math.round((v || 0) * 100))); }
+  function reltime(iso) {
+    if (!iso) return "—";
+    var s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (s < 60)    return "just now";
+    if (s < 3600)  return Math.round(s/60) + "m ago";
+    if (s < 86400) return Math.round(s/3600) + "h ago";
+    return Math.round(s/86400) + "d ago";
+  }
+  function readJSON(k, fb) { try { var r=localStorage.getItem(k); return r?JSON.parse(r):fb; } catch(e){ return fb; } }
+  function writeJSON(k,v)  { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} }
+
+  /* ── SVG icons ───────────────────────────────────────────────── */
+  var ICONS = {
+    refresh:  '<polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>',
+    search:   '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
+    shield:   '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
+    play:     '<polygon points="5 3 19 12 5 21 5 3"></polygon>',
+    zap:      '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>',
+    info:     '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
+    check:    '<polyline points="20 6 9 17 4 12"></polyline>',
+    server:   '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>',
+    clock:    '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+    key:      '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>',
+    grid:     '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    alert:    '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>'
+  };
+  function icon(name, cls) {
+    return '<svg class="' + (cls||"icon-svg") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name]||"") + '</svg>';
+  }
+
+  /* ── API ─────────────────────────────────────────────────────── */
   function apiGet(path) {
-    return fetch(path, { headers: { "Accept": "application/json" } })
-      .then(function (res) { 
-        return res.json()
-          .then(function (json) { json.__status = res.status; return json; })
-          .catch(function (err) { return { __status: res.status, errors: ["Invalid JSON response"] }; });
-      })
-      .catch(function (err) { return { __status: 0, errors: ["Network error"] }; });
+    return fetch(path, { headers:{ Accept:"application/json" } })
+      .then(function(r){ return r.json().then(function(j){ j.__st=r.status; return j; }).catch(function(){ return {__st:r.status,errors:["Bad JSON"]}; }); })
+      .catch(function(){ return {__st:0,errors:["Network error"]}; });
   }
-
   function apiPost(path, body, token) {
-    var headers = { "Content-Type": "application/json", "Accept": "application/json" };
-    if (token) headers.Authorization = "Bearer " + token;
-    return fetch(path, { method: "POST", headers: headers, body: JSON.stringify(body) })
-      .then(function (res) { return res.json().then(function (json) { json.__status = res.status; return json; }); });
+    var h = { "Content-Type":"application/json", Accept:"application/json" };
+    if (token) h.Authorization = "Bearer " + token;
+    return fetch(path,{ method:"POST", headers:h, body:JSON.stringify(body) })
+      .then(function(r){ return r.json().then(function(j){ j.__st=r.status; return j; }); });
   }
 
-  function sortedNodes() {
-    return state.nodes.slice().sort(function (a, b) {
-      var sa = statusForNode(a).score;
-      var sb = statusForNode(b).score;
-      if (sb !== sa) return sb - sa;
-      return (b.load || 0) - (a.load || 0);
+  /* ── Sorting ─────────────────────────────────────────────────── */
+  function sorted() {
+    return S.nodes.slice().sort(function(a,b){
+      var d = statusKey(b).score - statusKey(a).score;
+      return d !== 0 ? d : (b.load||0) - (a.load||0);
     });
   }
-
-  function selectedNode() {
-    return state.nodes.find(function (node) { return node.node_id === state.selected; }) || null;
-  }
-
-  function bestDefaultNode(nodes) {
-    if (!nodes.length) return "";
-    return nodes.slice().sort(function (a, b) {
-      var sa = statusForNode(a).score;
-      var sb = statusForNode(b).score;
-      if (sb !== sa) return sb - sa;
-      return (b.load || 0) - (a.load || 0);
+  function selNode() { return S.nodes.find(function(n){ return n.node_id===S.selected; })||null; }
+  function bestNode(ns) {
+    if (!ns.length) return "";
+    return ns.slice().sort(function(a,b){
+      var d = statusKey(b).score - statusKey(a).score;
+      return d !== 0 ? d : (b.load||0) - (a.load||0);
     })[0].node_id;
   }
-
-  function bodyForSelection() {
-    var node = selectedNode();
-    if (!node) {
-      return null;
-    }
-    return {
-      node_id: node.node_id,
-      arrival_rate: node.arrival_rate,
-      service_rate: node.service_rate > 0 ? node.service_rate : 1,
-      queue_length: node.queue_length
-    };
+  function bodyForSel() {
+    var n = selNode(); if (!n) return null;
+    return { node_id:n.node_id, arrival_rate:n.arrival_rate, service_rate:Math.max(n.service_rate,1), queue_length:n.queue_length };
   }
 
+  /* ── Busy / phase animation ──────────────────────────────────── */
   function startBusy(mode) {
     stopBusy(false);
-    state.busy = mode;
-    state.error = "";
-    state.phase = 0;
-    var i = 0;
-    phaseTimer = setInterval(function () {
-      i = Math.min(i + 1, phases.length - 1);
-      state.phase = i;
-      render();
-    }, 520);
+    S.busy=mode; S.error=""; S.phase=0;
+    var i=0;
+    phaseTimer = setInterval(function(){ i=Math.min(i+1,PHASES.length-1); S.phase=i; render(); }, 550);
     render();
-  }
-
-  function stopBusy(shouldRender) {
+  }  function stopBusy(doRender) {
     if (phaseTimer) clearInterval(phaseTimer);
-    phaseTimer = null;
-    state.busy = "";
-    state.phase = -1;
-    if (shouldRender) render();
+    phaseTimer=null; S.busy=""; S.phase=-1;
+    if (doRender) render();
   }
 
   function remember(result, kind) {
-    var safety = result.safety || result;
-    var item = {
-      time: new Date().toISOString(),
-      kind: kind,
-      root: result.root_cause || result.physics_root_cause || (selectedNode() && selectedNode().node_id) || "unknown",
-      state: safety.confidence_state || result.confidence_state || "UNKNOWN",
-      score: safety.confidence_score || result.confidence_score || 0,
-      data: result.data_source || "unknown"
-    };
-    state.history = [item].concat(state.history).slice(0, 8);
-    writeJSON("absia_control_history", state.history);
+    var root = result.root_cause || result.physics_root_cause || (selNode()&&selNode().node_id) || "unknown";
+    var cs   = result.confidence_state || "UNKNOWN";
+    var item = { time:new Date().toISOString(), kind:kind, root:root, state:cs, score:result.confidence_score||0 };
+    S.history = [item].concat(S.history).slice(0,6);
+    writeJSON("absia_history", S.history);
   }
 
+  /* ── Data fetching ───────────────────────────────────────────── */
   async function refresh() {
     try {
-      var results = await Promise.all([apiGet("/health"), apiGet("/nodes")]);
-      state.health = results[0] && !results[0].errors ? results[0] : null;
-      
-      // Check if /nodes succeeded (200) and has valid structure
-      var nodesAvailable = results[1] && results[1].__status === 200 && Array.isArray(results[1].nodes);
-      
-      if (nodesAvailable) {
-        state.nodes = results[1].nodes;
+      var [health, nodes] = await Promise.all([apiGet("/health"), apiGet("/nodes")]);
+      S.health = (health && !health.errors) ? health : null;
+      if (nodes && nodes.__st === 200 && Array.isArray(nodes.nodes)) {
+        S.nodes = nodes.nodes;
       } else {
-        // Fallback: /nodes endpoint not available, inject demo data
-        state.nodes = demoNodes();
+        S.nodes = [];
       }
-      
-      if (!state.selected || !state.nodes.some(function (node) { return node.node_id === state.selected; })) {
-        state.selected = bestDefaultNode(state.nodes);
-      }
-      state.lastUpdated = new Date();
+      if (!S.selected || !S.nodes.some(function(n){ return n.node_id===S.selected; }))
+        S.selected = bestNode(S.nodes);
+      S.lastUpdated = new Date();
+      S.apiError = false;
       render();
-    } catch (err) {
-      state.error = "The ABSIA API is not reachable from this page.";
+    } catch(e) {
+      S.nodes = [];
+      S.apiError = true;
+      S.lastUpdated = new Date();
       render();
     }
   }
 
-  async function runAnalyze() {
-    var body = bodyForSelection();
-    if (!body) {
-      state.error = "ABSIA is waiting for service metrics. Connect Prometheus or send samples to /ingest first.";
-      render();
-      return;
-    }
-    startBusy("analysis");
+  // One function. Hits /analyze and /act in parallel (same pipeline, different
+  // response slices). Merges everything into S.result and renders once.
+  async function runDiagnose() {
+    var body = bodyForSel();
+    if (!body) { S.error = "Select a service first."; render(); return; }
+    startBusy("diagnose");
+    S.result = null; S.error = "";
     try {
-      var result = await apiPost("/analyze", body);
+      // /analyze and /act run the same 5-phase pipeline server-side.
+      // Fire both in parallel so the user waits for only one round-trip worth of time.
+      var [analysis, act] = await Promise.all([
+        apiPost("/analyze", body),
+        apiPost("/act",     body, S.apiKey)
+      ]);
       stopBusy(false);
-      if (result.success === false || result.errors) {
-        state.error = (result.errors && result.errors[0]) || "Analysis failed.";
+      if (analysis.success === false) {
+        S.error = (analysis.errors && analysis.errors[0]) || "Analysis failed.";
       } else {
-        state.analysis = result;
-        state.explanation = null;
-        state.actions = null;
-        remember(result, "analysis");
+        // Merge: analysis carries root-cause + evidence; act carries ranked actions.
+        // If act was blocked by the safety gate that fact is preserved in act.success===false.
+        S.result = Object.assign({}, analysis, { act: act });
+        S.error  = "";
+        remember(analysis, "diagnose");
       }
       render();
-    } catch (err) {
+    } catch(e) {
       stopBusy(false);
-      state.error = "Analysis request failed.";
+      S.error = "Could not reach the API. Check the container is running.";
       render();
     }
   }
 
-  async function runExplain() {
-    var body = bodyForSelection();
-    if (!body) {
-      state.error = "ABSIA is waiting for service metrics. Connect Prometheus or send samples to /ingest first.";
-      render();
-      return;
-    }
-    startBusy("explain");
-    try {
-      var result = await apiPost("/explain", body);
-      stopBusy(false);
-      if (result.success === false || result.errors) {
-        state.error = (result.errors && result.errors[0]) || "Explanation failed.";
-      } else {
-        state.explanation = result;
-        state.actions = null;
-        remember(result, "explain");
-      }
-      render();
-    } catch (err) {
-      stopBusy(false);
-      state.error = "Explanation request failed.";
-      render();
-    }
-  }
-
-  async function runAct() {
-    var body = bodyForSelection();
-    if (!body) {
-      state.error = "ABSIA is waiting for service metrics. Connect Prometheus or send samples to /ingest first.";
-      render();
-      return;
-    }
-    startBusy("act");
-    try {
-      var result = await apiPost("/act", body, state.apiKey);
-      stopBusy(false);
-      state.actions = result;
-      if (result.success === false && result.errors) {
-        state.error = result.errors[0];
-      } else {
-        state.error = "";
-      }
-      remember(result, "action");
-      render();
-    } catch (err) {
-      stopBusy(false);
-      state.error = "Action request failed.";
-      render();
-    }
-  }
-
-  function render() {
-    document.getElementById("app").innerHTML = [
-      '<div class="app">',
-      renderRail(),
-      '<main class="main">',
-      renderTopbar(),
-      renderKpis(),
-      '<div class="workspace">',
-      renderCommandPanel(),
-      renderNodeMap(),
-      renderInsightPanel(),
-      '</div>',
-      renderInventory(),
-      '</main>',
-      '</div>'
-    ].join("");
-    bindEvents();
-  }
-
-  function renderRail() {
+  /* ── Render helpers ──────────────────────────────────────────── */
+  function renderHeader() {
+    var online = S.health && S.health.status==="ok";
+    var real   = S.health && S.health.real_data_available;
+    var last   = S.lastUpdated ? S.lastUpdated.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "—";
     return [
-      '<aside class="rail">',
-      '<div class="brand-mark" title="ABSIA">A</div>',
-      '<a class="rail-link" href="#command" title="Command">' + icon("target") + '</a>',
-      '<a class="rail-link" href="#map" title="Causal map">' + icon("graph") + '</a>',
-      '<a class="rail-link" href="#nodes" title="Node inventory">' + icon("database") + '</a>',
-      '<a class="rail-link" href="#insight" title="Safety">' + icon("shield") + '</a>',
-      '</aside>'
-    ].join("");
-  }
-
-  function renderTopbar() {
-    var online = state.health && state.health.status === "ok";
-    var real = state.health && state.health.real_data_available;
-    var last = state.lastUpdated ? state.lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-";
-    return [
-      '<section class="topbar">',
-      '<div>',
-      '<div class="eyebrow">Adaptive Bayes-Structural Inference and Action</div>',
-      '<h1>ABSIA Causal Control Plane</h1>',
-      '<div class="subtitle">Live node inventory, causal root-cause analysis, Pearl-style effect evidence, RL-ranked interventions, and an explicit safety gate in one operator surface.</div>',
-      '</div>',
-      '<div class="top-actions">',
-      '<span class="chip ' + (online ? "ok live" : "bad") + '"><span class="dot"></span>' + (online ? "API online" : "API offline") + '</span>',
-      '<span class="chip ' + (real ? "ok" : "warn") + '">' + (real ? "Real data" : "Awaiting metrics") + '</span>',
-      '<span class="chip info">' + escapeHTML(last) + '</span>',
-      '<button class="icon-btn" data-action="refresh" title="Refresh">' + icon("refresh") + '</button>',
-      '</div>',
-      '</section>'
+      '<header class="header">',
+        '<div class="logo">',
+          '<div class="logo-mark">AB</div>',
+          '<div>',
+            '<div class="logo-text">ABSIA</div>',
+            '<div class="logo-tag">Causal Intelligence Engine</div>',
+          '</div>',
+        '</div>',
+        '<div class="header-sep"></div>',
+        '<div class="status-row">',
+          online
+            ? '<span class="badge live"><span class="live-dot"></span>Live</span>'
+            : '<span class="badge dead">Offline</span>',
+          (online && real) ? '<span class="badge live">' + S.nodes.length + ' service' + (S.nodes.length===1?'':'s') + ' monitored</span>' : '',
+          '<span class="badge"><svg style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>&nbsp;' + esc(last) + '</span>',
+          '<button class="icon-btn" data-action="refresh" title="Refresh">' + icon("refresh") + '</button>',
+        '</div>',
+      '</header>'
     ].join("");
   }
 
   function renderKpis() {
-    var nodes = state.nodes.length;
-    var hot = state.nodes.filter(function (n) { return statusForNode(n).score >= 2; }).length;
-    var ready = state.nodes.filter(function (n) { return n.pipeline_ready; }).length;
-    var meta = safetyMeta(state.analysis && state.analysis.safety);
-    var root = state.analysis && (state.analysis.root_cause || state.analysis.physics_root_cause);
-    return [
-      '<section class="grid-kpis">',
-      kpi("Observed nodes", nodes || "-", ready + " pipeline-ready"),
-      kpi("Hot nodes", hot, hot ? "pressure or overload" : "no pressure detected", hot ? "warn" : "ok"),
-      kpi("Safety gate", meta.label, state.analysis ? pct((state.analysis.safety || state.analysis).confidence_score || 0) + " confidence" : "waiting for analysis", meta.key),
-      kpi("Root cause", root ? nameFor(root) : "-", root ? root : "not evaluated", root ? "info" : ""),
-      '</section>'
-    ].join("");
-  }
+    var ns    = S.nodes;
+    var total = ns.length;
+    var hot   = ns.filter(function(n){ return statusKey(n).score >= 2; }).length;
+    var ready = ns.filter(function(n){ return n.pipeline_ready; }).length;
+    var r     = S.result;
+    var conf  = r ? confMeta(r) : null;
+    var root  = r && (r.root_cause || r.physics_root_cause);
 
-  function kpi(label, value, foot, color) {
     return [
-      '<div class="kpi">',
-      '<div class="kpi-label"><span>' + escapeHTML(label) + '</span>' + (color ? '<span class="state-pill ' + color + '">' + escapeHTML(color === "ok" ? "clear" : color) + '</span>' : '') + '</div>',
-      '<div class="kpi-value">' + escapeHTML(value) + '</div>',
-      '<div class="kpi-foot">' + escapeHTML(foot || "") + '</div>',
+      '<div class="kpi-strip">',
+        kpiTile("Services watched", total ? String(total) : "—", total ? ready + " pipeline-ready" : "Waiting for services", total ? "teal" : ""),
+        kpiTile("Under pressure",   total ? String(hot)   : "—", total ? (hot ? "need attention" : "all clear") : "No data yet", total ? (hot ? "amber" : "teal") : ""),
+        kpiTile("Safety gate",  conf ? conf.label : "—", r ? pct(r.confidence_score||0)+" confidence" : "Run a diagnosis first", conf ? conf.key==="ok"?"teal":conf.key==="warn"?"amber":"red" : ""),
+        kpiTile("Root cause",   root ? friendlyName(root) : "—", root ? root : "No diagnosis run yet", root ? "blue" : ""),
       '</div>'
     ].join("");
   }
 
-  function renderCommandPanel() {
-    var node = selectedNode();
-    var disableCommand = state.busy || !node;
-    var options = state.nodes.map(function (n) {
-      return '<option value="' + escapeHTML(n.node_id) + '"' + (n.node_id === state.selected ? " selected" : "") + '>' + escapeHTML(nameFor(n.node_id)) + ' - ' + escapeHTML(n.node_id) + '</option>';
-    }).join("");
-    var selectedCopy = node
-      ? 'Load ' + pct(node.load || 0) + ', queue ' + fmt(node.queue_length, 0) + ', samples ' + fmt(node.sample_count, 0)
-      : 'No observed node yet. Connect Prometheus or send samples to /ingest.';
+  function kpiTile(label, value, foot, color) {
+    var cls = color && {teal:"teal",amber:"amber",red:"red",blue:"blue",ok:"teal"}[color] || "";
     return [
-      '<section class="panel" id="command">',
-      '<div class="panel-head"><div class="panel-title">' + icon("target") + '<span>Command</span></div></div>',
-      '<div class="panel-body stack">',
-      '<div class="field">',
-      '<label for="nodeSelect">Focus node</label>',
-      '<select class="select" id="nodeSelect" ' + (state.nodes.length ? "" : "disabled") + '>',
-      state.nodes.length ? options : '<option>No observed nodes</option>',
-      '</select>',
-      '</div>',
-      '<div class="notice">' + escapeHTML(selectedCopy) + '</div>',
-      '<div class="command-buttons">',
-      '<button class="btn primary" data-action="analyze" ' + (disableCommand ? "disabled" : "") + '>' + busyIcon("analysis") + 'Analyze causality</button>',
-      '<button class="btn" data-action="explain" ' + (disableCommand ? "disabled" : "") + '>' + busyIcon("explain") + 'Explain evidence</button>',
-      '<button class="btn warn" data-action="act" ' + (disableCommand ? "disabled" : "") + '>' + busyIcon("act") + 'Request action policy</button>',
-      '</div>',
-      '<div class="field">',
-      '<label for="apiKey">Action API key</label>',
-      '<input class="input" id="apiKey" type="password" autocomplete="off" value="' + escapeHTML(state.apiKey) + '" placeholder="Only needed when auth is enabled">',
-      '</div>',
-      renderPhases(),
-      renderHistory(),
-      '</div>',
-      '</section>'
+      '<div class="kpi-tile">',
+        '<div class="kpi-label">' + esc(label) + '</div>',
+        '<div class="kpi-value ' + cls + '">' + esc(value) + '</div>',
+        '<div class="kpi-foot">' + esc(foot) + '</div>',
+      '</div>'
     ].join("");
   }
 
-  function busyIcon(mode) {
-    if (state.busy === mode) return '<span class="spinner" aria-hidden="true"></span>';
-    if (mode === "analysis") return icon("play");
-    if (mode === "explain") return icon("graph");
-    if (mode === "act") return icon("bolt");
-    return icon("spark");
-  }
-
-  function renderPhases() {
-    if (!state.busy) {
-      return [
-        '<div class="stack">',
-        '<div class="section-label">Five-phase pipeline</div>',
-        '<div class="phase-list">',
-        phases.map(function (phase, index) {
-          return '<div class="phase"><div class="phase-num">' + (index + 1) + '</div><div>' + escapeHTML(phase) + '</div></div>';
-        }).join(""),
+  function renderServicesCol() {
+    var ns = sorted();
+    return [
+      '<div class="services-col">',
+        '<div class="col-hd">',
+          '<span class="col-hd-title">Your Services</span>',
+          '<span class="count-badge">' + ns.length + '</span>',
         '</div>',
-        '</div>'
-      ].join("");
-    }
-    return [
-      '<div class="stack">',
-      '<div class="section-label">Running ' + escapeHTML(state.busy) + '</div>',
-      '<div class="phase-list">',
-      phases.map(function (phase, index) {
-        var cls = index < state.phase ? " done" : index === state.phase ? " active" : "";
-        var mark = index < state.phase ? icon("check") : (index + 1);
-        return '<div class="phase' + cls + '"><div class="phase-num">' + mark + '</div><div>' + escapeHTML(phase) + '</div></div>';
-      }).join(""),
-      '</div>',
+        '<div class="service-list">',
+          ns.length ? ns.map(renderServiceCard).join("") : renderEmptyServices(),
+        '</div>',
       '</div>'
     ].join("");
   }
 
-  function renderHistory() {
-    if (!state.history.length) return "";
-    return [
-      '<div class="stack">',
-      '<div class="section-label">Recent runs</div>',
-      '<div class="history">',
-      state.history.slice(0, 4).map(function (item) {
-        return [
-          '<div class="history-row">',
-          '<strong>' + escapeHTML(nameFor(item.root)) + '</strong>',
-          '<span class="dim">' + escapeHTML(item.kind) + ' - ' + escapeHTML(item.state) + ' - ' + pct(item.score) + ' - ' + escapeHTML(relativeTime(item.time)) + '</span>',
-          '</div>'
-        ].join("");
-      }).join(""),
-      '</div>',
-      '</div>'
-    ].join("");
-  }
+  function renderServiceCard(node) {
+    var meta  = statusKey(node);
+    var w     = clamp(node.load || 0);
+    var name  = friendlyName(node.node_id);
+    var sent  = sentenceForNode(node);
+    var isAct = node.node_id === S.selected;
 
-  function renderNodeMap() {
-    var nodes = sortedNodes();
     return [
-      '<section class="panel node-map" id="map">',
-      '<div class="panel-head">',
-      '<div class="panel-title">' + icon("graph") + '<span>Observed Causal Surface</span></div>',
-      '<span class="chip">' + escapeHTML(nodes.length) + ' observed</span>',
-      '</div>',
-      '<div class="panel-body">',
-      nodes.length ? '<div class="map-grid">' + nodes.map(renderNodeCard).join("") + '</div>' : renderEmptyMap(),
-      '</div>',
-      '</section>'
-    ].join("");
-  }
-
-  function renderNodeCard(node) {
-    var meta = statusForNode(node);
-    var width = Math.min(100, Math.max(0, Math.round((node.load || 0) * 100)));
-    return [
-      '<button class="node-card ' + (node.node_id === state.selected ? "selected" : "") + '" data-select="' + escapeHTML(node.node_id) + '">',
-      '<span class="state-pill ' + meta.key + '" style="position:absolute;right:10px;top:10px;">' + escapeHTML(meta.label) + '</span>',
-      '<div class="node-name">' + escapeHTML(nameFor(node.node_id)) + '</div>',
-      (node.container_name ? '<div class="node-id">' + escapeHTML(node.container_name) + '</div>' : ''),
-      (node.image ? '<div class="node-id dim">' + escapeHTML(node.image) + '</div>' : ''),
-      '<div class="node-id">' + escapeHTML(node.node_id) + '</div>',
-      '<div class="node-load"><div class="bar ' + meta.key + '"><span style="width:' + width + '%"></span></div></div>',
-      '<div class="node-meta"><span>' + pct(node.load || 0) + ' load</span><span>' + fmt(node.queue_length, 0) + ' queued</span></div>',
-      '<div class="node-meta" style="margin-top:8px;"><span>' + fmt(node.arrival_rate, 1) + ' in</span><span>' + fmt(node.service_rate, 1) + ' cap</span></div>',
+      '<button class="service-card ' + meta.key + (isAct?" active":"") + '" data-select="' + esc(node.node_id) + '">',
+        '<div class="sc-top">',
+          '<div>',
+            '<div class="sc-name">' + esc(name) + '</div>',
+            '<div class="sc-id">' + esc(node.node_id) + '</div>',
+          '</div>',
+          '<span class="sc-pill ' + meta.key + '">' + esc(meta.label) + '</span>',
+        '</div>',
+        '<div class="sc-sentence">' + esc(sent) + '</div>',
+        '<div class="sc-bar-wrap">',
+          '<div class="sc-bar-label">',
+            '<span>Capacity used</span>',
+            '<span>' + pct(node.load||0) + '</span>',
+          '</div>',
+          '<div class="sc-bar"><div class="sc-bar-fill ' + meta.key + '" style="width:' + w + '%"></div></div>',
+        '</div>',
+        '<div class="sc-stats">',
+          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.arrival_rate,0) + '</div><div class="sc-stat-key">In</div></div>',
+          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.service_rate,0) + '</div><div class="sc-stat-key">Capacity</div></div>',
+          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.queue_length,0) + '</div><div class="sc-stat-key">Queued</div></div>',
+          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.sample_count,0) + '</div><div class="sc-stat-key">Samples</div></div>',
+        '</div>',
       '</button>'
     ].join("");
   }
 
-  function renderEmptyMap() {
-    return [
-      '<div class="empty">',
-      '<div>',
-      '<div class="state-pill info" style="display:inline-flex;">' + icon("database") + 'Awaiting nodes</div>',
-      '<h2>No observed services yet</h2>',
-      '<p>Run ABSIA beside your app, expose port 8080, and connect metrics through Prometheus or POST /ingest. Nodes appear here automatically.</p>',
-      '</div>',
-      '</div>'
-    ].join("");
-  }
-
-  function renderInsightPanel() {
-    return [
-      '<section class="panel insight" id="insight">',
-      '<div class="panel-head"><div class="panel-title">' + icon("shield") + '<span>Insight and Safety</span></div></div>',
-      '<div class="panel-body stack">',
-      state.error ? '<div class="notice bad">' + escapeHTML(state.error) + '</div>' : '',
-      state.actions ? renderActions() : '',
-      state.explanation ? renderExplanation() : '',
-      state.analysis ? renderAnalysis() : renderNoAnalysis(),
-      '</div>',
-      '</section>'
-    ].join("");
-  }
-
-  function renderNoAnalysis() {
-    return [
-      '<div class="result-hero">',
-      '<div class="result-title">Ready for causal analysis</div>',
-      '<div class="result-copy">When metrics arrive, select an observed node and execute the five-phase pipeline.</div>',
-      '</div>',
-      '<div class="result-grid">',
-      '<div class="mini-stat"><div class="label">Safety posture</div><div class="value">No decision</div></div>',
-      '<div class="mini-stat"><div class="label">Policy layer</div><div class="value">Idle</div></div>',
-      '</div>'
-    ].join("");
-  }
-
-  function renderAnalysis() {
-    var result = state.analysis;
-    var safety = result.safety || result;
-    var meta = safetyMeta(safety);
-    var root = result.root_cause || result.physics_root_cause || "unknown";
-    return [
-      '<div class="result-hero">',
-      '<span class="state-pill ' + meta.key + '">' + escapeHTML(meta.label) + ' safety gate</span>',
-      '<div class="result-title" style="margin-top:12px;">' + escapeHTML(nameFor(root)) + '</div>',
-      '<div class="result-copy">' + escapeHTML(summaryForAnalysis(result)) + '</div>',
-      '</div>',
-      '<div class="result-grid">',
-      miniStat("Confidence", pct(safety.confidence_score || result.confidence_score || 0)),
-      miniStat("Latent risk", safety.latent_risk || result.latent_risk || "UNKNOWN"),
-      miniStat("Graph coverage", pct(safety.graph_coverage || 0)),
-      miniStat("Execution", fmt(result.execution_time_ms, 1) + " ms"),
-      '</div>',
-      renderEvidence("Backdoor-adjusted effects", result.backdoor_effects || result.causes || {}),
-      renderFallback(safety)
-    ].join("");
-  }
-
-  function summaryForAnalysis(result) {
-    var safety = result.safety || result;
-    var root = result.root_cause || result.physics_root_cause;
-    var stateName = safety.confidence_state || result.confidence_state || "UNKNOWN";
-    if (!root) return "The run completed, but no stable root cause was identified. Check fallback reasons and probe recommendations.";
-    if (stateName === "CONFIRMED") return "ABSIA found a high-confidence causal origin and can support targeted remediation.";
-    if (stateName === "PROBABLE") return "ABSIA found a plausible causal origin. Treat the action policy as a recommendation, not automation.";
-    return "ABSIA refused to overstate the result. More instrumentation is needed before automated action.";
-  }
-
-  function renderExplanation() {
-    var exp = state.explanation;
-    return [
-      '<div class="section-label">Explanation layer</div>',
-      renderEvidence("Effects", exp.effects || {}),
-      renderEvidence("Uncertainty", exp.uncertainty || {})
-    ].join("");
-  }
-
-  function renderActions() {
-    var result = state.actions;
-    if (result.success === false) {
-      var safety = result.safety || result;
+  function renderEmptyServices() {
+    if (S.apiError) {
       return [
-        '<div class="notice bad">',
-        '<strong>Action blocked.</strong> ',
-        escapeHTML((result.errors && result.errors[0]) || "The safety gate did not permit automated remediation."),
-        '</div>',
-        renderFallback(safety)
+        '<div class="empty-col">',
+          '<div class="empty-icon-lg">' + icon("alert") + '</div>',
+          '<h3>Cannot reach ABSIA</h3>',
+          '<p>The API is not responding. Check that the container is running and port 8080 is reachable.</p>',
+        '</div>'
       ].join("");
     }
-    var actions = result.recommended_actions || [];
-    if (!actions.length) return '<div class="notice warn">No policy actions were returned for this run.</div>';
     return [
-      '<div class="section-label">Policy actions</div>',
-      '<div class="evidence-list">',
-      actions.map(function (action) {
-        var label = Object.keys(action.interventions || {}).map(function (key) {
-          return nameFor(key) + " -> " + fmt(action.interventions[key], 2);
-        }).join(", ") || "No intervention value";
-        return [
-          '<div class="history-row">',
-          '<strong>Rank ' + escapeHTML(action.policy_rank || "-") + '</strong>',
-          '<span class="muted">' + escapeHTML(label) + '</span>',
-          '<div class="bar ok"><span style="width:' + Math.round((action.policy_score || 0) * 100) + '%"></span></div>',
-          '</div>'
-        ].join("");
-      }).join(""),
+      '<div class="empty-col">',
+        '<div class="empty-icon-lg">' + icon("server") + '</div>',
+        '<h3>No services detected</h3>',
+        '<p>ABSIA is running and watching for containers. Start your other services and they will appear here automatically.</p>',
       '</div>'
     ].join("");
   }
 
-  function renderEvidence(title, data) {
-    var entries = Object.keys(data || {}).map(function (key) {
-      return [key, Number(data[key]) || 0];
-    }).sort(function (a, b) { return Math.abs(b[1]) - Math.abs(a[1]); }).slice(0, 6);
-    if (!entries.length) return "";
-    var max = Math.max.apply(null, entries.map(function (x) { return Math.abs(x[1]); }).concat([1]));
+  function renderMiddleCol() {
+    var node = selNode();
     return [
-      '<div class="stack">',
-      '<div class="section-label">' + escapeHTML(title) + '</div>',
-      '<div class="evidence-list">',
-      entries.map(function (entry) {
-        var width = Math.max(4, Math.round(Math.abs(entry[1]) / max * 100));
-        return [
-          '<div class="evidence-row">',
-          '<div>',
-          '<div class="evidence-name">' + escapeHTML(nameFor(entry[0])) + '</div>',
-          '<div class="bar info"><span style="width:' + width + '%"></span></div>',
+      '<div class="middle-col">',
+        node ? renderDetailHeader(node) : renderNoSelection(),
+        renderActionsStrip(node),
+        renderPipelineTrack(),
+        '<div class="result-area">',
+          S.error ? '<div class="alert-box err">' + icon("alert") + ' ' + esc(S.error) + '</div>' : '',
+          S.result ? renderFullResult() : (S.busy ? "" : renderResultPlaceholder()),
+        '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderNoSelection() {
+    if (S.apiError) {
+      return [
+        '<div style="padding:20px 24px;border-bottom:1px solid var(--border);">',
+          '<div class="alert-box err" style="margin:0">' + icon("alert") + ' ABSIA API is not reachable. Ensure the container is running on port 8080.</div>',
+        '</div>'
+      ].join("");
+    }
+    if (!S.nodes.length) {
+      return [
+        '<div style="padding:20px 24px;border-bottom:1px solid var(--border);">',
+          '<div style="color:var(--muted);font-size:13px;line-height:1.6">',
+            'Waiting for containers to appear. This usually takes less than 30 seconds after your other services start.',
           '</div>',
-          '<div class="evidence-score">' + fmt(entry[1], 3) + '</div>',
-          '</div>'
-        ].join("");
-      }).join(""),
-      '</div>',
+        '</div>'
+      ].join("");
+    }
+    return [
+      '<div style="padding:20px 24px;border-bottom:1px solid var(--border);">',
+        '<div style="color:var(--muted);font-size:13px;">Select a service from the left to begin analysis.</div>',
       '</div>'
     ].join("");
   }
 
-  function renderFallback(safety) {
+  function renderDetailHeader(node) {
+    var meta = statusKey(node);
+    var load = node.load || 0;
+    var over = load > 1 ? Math.round((load-1)*100)+"% over capacity" : Math.round(load*100)+"% of capacity";
+
+    return [
+      '<div class="detail-header">',
+        '<div class="detail-name">' + esc(friendlyName(node.node_id)) + '</div>',
+        '<div class="detail-id">' + esc(node.node_id) + '  ·  sampled ' + esc(reltime(node.last_seen)) + '</div>',
+        '<div class="detail-metrics">',
+          '<div class="dm-cell">',
+            '<div class="dm-val ' + (load >= 1 ? "red" : load >= 0.85 ? "amber" : "teal") + '">' + pct(load) + '</div>',
+            '<div class="dm-key">' + esc(over) + '</div>',
+          '</div>',
+          '<div class="dm-cell">',
+            '<div class="dm-val">' + fmt(node.arrival_rate,0) + '</div>',
+            '<div class="dm-key">Incoming req/s</div>',
+          '</div>',
+          '<div class="dm-cell">',
+            '<div class="dm-val">' + fmt(node.service_rate,0) + '</div>',
+            '<div class="dm-key">Processing capacity</div>',
+          '</div>',
+        '</div>',
+        '<div class="detail-sentence">' + esc(sentenceForNode(node)) + '</div>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderActionsStrip(node) {
+    var dis = S.busy || !node ? "disabled" : "";
+    var spin = S.busy ? '<span class="spinner"></span>' : icon("play");
+    return [
+      '<div class="actions-strip">',
+        '<select class="node-select" id="nodeSelect">',
+          S.nodes.length
+            ? S.nodes.map(function(n){ return '<option value="' + esc(n.node_id) + '"' + (n.node_id===S.selected?" selected":"") + '>' + esc(friendlyName(n.node_id)) + ' (' + esc(n.node_id) + ')</option>'; }).join("")
+            : '<option>No services yet</option>',
+        '</select>',
+        '<button class="btn primary" data-action="diagnose" ' + dis + '>' + spin + '<span>' + (S.busy ? "Running analysis…" : "Run Diagnosis") + '</span></button>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderPipelineTrack() {
+    if (!S.busy && S.phase === -1 && !S.result) return "";
+    var done_all = S.result && !S.busy;
+    var parts = ['<div class="pipeline-track">'];
+    PHASES.forEach(function(p, i) {
+      var done   = done_all || (S.busy && i < S.phase);
+      var active = S.busy && i === S.phase;
+      var cls    = done ? "done" : active ? "active" : "";
+      parts.push('<div class="pt-step">');
+      parts.push('<div class="pt-node ' + cls + '">' + (done ? icon("check","icon-svg") : (i+1)) + '</div>');
+      if (i < PHASES.length - 1) parts.push('<div class="pt-line ' + (done?"done":"") + '"></div>');
+      parts.push('</div>');
+    });
+    parts.push('</div>');
+    parts.push('<div class="pt-labels">');
+    PHASES.forEach(function(p, i) {
+      var done   = done_all || (S.busy && i < S.phase);
+      var active = S.busy && i === S.phase;
+      var cls    = done ? "done" : active ? "active" : "";
+      parts.push('<div class="pt-label ' + cls + '">' + esc(active ? p.long : p.short) + '</div>');
+    });
+    parts.push('</div>');
+    return parts.join("");
+  }
+
+  function renderResultPlaceholder() {
+    return [
+      '<div class="result-empty">',
+        '<div class="empty-icon-lg" style="margin:0 auto 14px">' + icon("activity") + '</div>',
+        '<h3>Ready</h3>',
+        '<p>Select a service and click <strong>Run Diagnosis</strong>. ABSIA will identify the root cause and tell you what to do.</p>',
+      '</div>'
+    ].join("");
+  }
+
+  function renderFallbackWarning(safety) {
     if (!safety) return "";
     var reasons = safety.fallback_reasons || [];
-    var probes = safety.probe_nodes || safety.probe_recommendations || [];
+    var probes  = safety.probe_nodes || safety.probe_recommendations || [];
     if (!reasons.length && !probes.length) return "";
     return [
-      '<div class="notice warn">',
-      reasons.length ? '<strong>Fallback reasons:</strong> ' + escapeHTML(reasons.join(", ")) + '<br>' : '',
-      probes.length ? '<strong>Probe next:</strong> ' + escapeHTML(probes.join(", ")) : '',
+      '<div class="alert-box warn">',
+        reasons.length ? '<strong>Why confidence is low:</strong> ' + esc(reasons.join(", ")) + (probes.length?"<br>":"") : "",
+        probes.length ? '<strong>Investigate next:</strong> ' + esc(probes.join(", ")) : "",
+      '</div>'
+    ].join("");
+  }
+  // Three sections: root cause story → evidence chain → recommended actions.
+  function renderFullResult() {
+    var r    = S.result;
+    var act  = r.act || {};
+    var meta = confMeta(r);
+    var root = r.root_cause || r.physics_root_cause;
+
+    var effects = r.backdoor_effects || r.causes || {};
+    var effectEntries = Object.keys(effects)
+      .map(function(k){ return [k, Number(effects[k])||0]; })
+      .sort(function(a,b){ return Math.abs(b[1])-Math.abs(a[1]); })
+      .slice(0,5);
+    var maxE = effectEntries.length
+      ? Math.max.apply(null, effectEntries.map(function(e){ return Math.abs(e[1]); }))
+      : 1;
+
+    // ── Section 1: Root cause story ──
+    var s1 = [
+      '<div class="result-story">',
+        '<div class="result-verdict">',
+          '<span class="verdict-pill ' + meta.key + '">' + esc(meta.label) + '</span>',
+          '<span style="font-size:12px;color:var(--dim)">' + fmt(r.execution_time_ms,0) + ' ms</span>',
+        '</div>',
+        '<div class="result-headline">' + esc(analysisHeadline(r)) + '</div>',
+        '<div class="result-body">' + analysisStory(r) + '</div>',
+        '<div class="result-stats">',
+          '<div class="rstat"><div class="rstat-val">' + pct(r.confidence_score||0) + '</div><div class="rstat-key">Confidence</div></div>',
+          '<div class="rstat"><div class="rstat-val">' + esc(r.latent_risk||"—") + '</div><div class="rstat-key">Hidden risk</div></div>',
+          '<div class="rstat"><div class="rstat-val">' + (r.patterns_detected||r.patterns_count||0) + '</div><div class="rstat-key">Anomalies</div></div>',
+        '</div>',
+      '</div>'
+    ].join("");
+
+    // ── Section 2: Evidence — what's being impacted ──
+    var s2 = effectEntries.length ? [
+      '<div class="impact-section">',
+        '<div class="section-label">What\'s being impacted</div>',
+        effectEntries.map(function(e) {
+          var w = Math.max(4, Math.round(Math.abs(e[1]) / maxE * 100));
+          return [
+            '<div class="impact-row">',
+              '<div class="impact-name">' + esc(friendlyName(e[0])) + '</div>',
+              '<div class="impact-bar-wrap"><div class="impact-bar"><div class="impact-bar-fill" style="width:' + w + '%"></div></div></div>',
+              '<div class="impact-score">' + fmt(e[1],3) + '</div>',
+            '</div>'
+          ].join("");
+        }).join(""),
+      '</div>'
+    ].join("") : "";
+
+    // ── Section 3: Actions (or safety gate block) ──
+    var s3 = "";
+    if (act.success === false) {
+      s3 = [
+        '<div class="alert-box warn">',
+          icon("shield") + ' <strong>No actions recommended.</strong> Confidence is too low to suggest changes safely. Collect more data and run again.',
+        '</div>'
+      ].join("");
+    } else {
+      var acts = act.recommended_actions || act.actions || [];
+      if (acts.length) {
+        s3 = [
+          '<div class="impact-section">',
+            '<div class="section-label">What to do about it</div>',
+            acts.slice(0,3).map(function(a, i) {
+              var keys = Object.keys(a.interventions || {});
+              var label = keys.length
+                ? keys.map(function(k){ return friendlyName(k) + " → " + fmt(a.interventions[k],2); }).join(", ")
+                : "Adjust " + friendlyName(S.selected);
+              var score = Math.round((a.policy_score||0)*100);
+              return [
+                '<div class="action-card" style="animation-delay:' + (i*.06) + 's">',
+                  '<div class="ac-rank">Option ' + (i+1) + (score ? '  ·  ' + score + '% confidence' : '') + '</div>',
+                  '<div class="ac-name">' + esc(label) + '</div>',
+                  score ? '<div class="ac-bar"><div class="ac-bar-fill" style="width:' + score + '%"></div></div>' : '',
+                '</div>'
+              ].join("");
+            }).join(""),
+          '</div>'
+        ].join("");
+      }
+    }
+
+    // ── Fallback reasons ──
+    var s4 = renderFallbackWarning(r.safety || r);
+
+    return s1 + s2 + s3 + s4;
+  }
+
+  function renderRightCol() {
+    return [
+      '<div class="right-col">',
+        /* API key */
+        '<div class="r-section">',
+          '<div class="r-section-title">Authentication</div>',
+          '<div class="field-label">API key for /act endpoint</div>',
+          '<input class="field-input" id="apiKey" type="password" autocomplete="off" value="' + esc(S.apiKey) + '" placeholder="Leave empty if auth disabled">',
+        '</div>',
+
+        /* History */
+        S.history.length ? [
+          '<div class="r-section">',
+            '<div class="r-section-title">Recent runs</div>',
+            '<div class="history-list">',
+            S.history.map(function(item) {
+              var cm = confMeta({confidence_state:item.state});
+              return [
+                '<div class="history-item">',
+                  '<div class="hi-dot ' + cm.key + '"></div>',
+                  '<div class="hi-body">',
+                    '<div class="hi-root">' + esc(friendlyName(item.root)) + '</div>',
+                    '<div class="hi-meta">' + esc(item.kind) + ' · ' + esc(cm.label) + ' · ' + esc(reltime(item.time)) + '</div>',
+                  '</div>',
+                '</div>'
+              ].join("");
+            }).join(""),
+            '</div>',
+          '</div>'
+        ].join("") : "",
+
+        /* What diagnosis does */
+        '<div class="r-section">',
+          '<div class="r-section-title">What happens when you diagnose</div>',
+          '<div style="display:flex;flex-direction:column;gap:10px">',
+            helpRow("Root cause", "teal", "Identifies which service is most likely causing the problem and how confident ABSIA is."),
+            helpRow("Impact",     "blue", "Shows which other services are being affected and by how much."),
+            helpRow("Actions",    "amber", "Recommends what to do. If confidence is too low, this section is withheld — ABSIA never guesses."),
+          '</div>',
+        '</div>',
+
+        /* Auto-refresh note */
+        '<div class="r-section">',
+          '<div class="r-section-title">Auto-refresh</div>',
+          '<div style="font-size:12px;color:var(--muted);line-height:1.7">',
+            'Service metrics update every <strong style="color:var(--text)">15 seconds</strong> automatically. The dashboard refreshes every <strong style="color:var(--text)">10 seconds</strong>. No action needed.',
+          '</div>',
+        '</div>',
       '</div>'
     ].join("");
   }
 
-  function miniStat(label, value) {
-    return '<div class="mini-stat"><div class="label">' + escapeHTML(label) + '</div><div class="value">' + escapeHTML(value) + '</div></div>';
-  }
-
-  function renderInventory() {
-    var rows = state.nodes.map(function (node) {
-      var meta = statusForNode(node);
-      return [
-        '<tr>',
-        '<td><strong>' + escapeHTML(nameFor(node.node_id)) + '</strong>' +
-          (node.container_name ? '<div class="dim">' + escapeHTML(node.container_name) + '</div>' : '') +
-          (node.image ? '<div class="dim">' + escapeHTML(node.image) + '</div>' : '') +
-          '<div class="dim">' + escapeHTML(node.node_id) + '</div></td>',
-        '<td><span class="state-pill ' + meta.key + '">' + escapeHTML(meta.label) + '</span></td>',
-        '<td>' + fmt(node.arrival_rate, 1) + '</td>',
-        '<td>' + fmt(node.service_rate, 1) + '</td>',
-        '<td>' + pct(node.load || 0) + '</td>',
-        '<td>' + fmt(node.queue_length, 0) + '</td>',
-        '<td>' + fmt(node.sample_count, 0) + (node.pipeline_ready ? '<div class="dim">ready</div>' : '<div class="dim">needs 4 samples</div>') + '</td>',
-        '<td>' + escapeHTML(relativeTime(node.last_seen)) + '</td>',
-        '</tr>'
-      ].join("");
-    }).join("");
+  function helpRow(label, color, desc) {
     return [
-      '<section class="panel table-panel" id="nodes">',
-      '<div class="panel-head">',
-      '<div class="panel-title">' + icon("database") + '<span>Node Inventory</span></div>',
-      '<span class="chip">' + escapeHTML(state.nodes.length) + ' nodes</span>',
-      '</div>',
-      '<div class="table-wrap">',
-      '<table>',
-      '<thead><tr><th>Node</th><th>State</th><th>Arrival</th><th>Capacity</th><th>Load</th><th>Queue</th><th>Samples</th><th>Last seen</th></tr></thead>',
-      '<tbody>',
-      rows || '<tr><td colspan="8" class="muted">No observed nodes yet.</td></tr>',
-      '</tbody>',
-      '</table>',
-      '</div>',
-      '</section>'
+      '<div style="display:flex;gap:10px;align-items:flex-start">',
+        '<span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;flex-shrink:0;margin-top:1px;',
+          color==="teal"  ? 'background:var(--teal-dim);color:var(--teal);border:1px solid var(--teal-bd)' :
+          color==="amber" ? 'background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-bd)' :
+                           'background:var(--blue-dim);color:var(--blue);border:1px solid var(--blue-bd)',
+        '">' + esc(label) + '</span>',
+        '<span style="font-size:12px;color:var(--muted);line-height:1.5">' + esc(desc) + '</span>',
+      '</div>'
     ].join("");
   }
 
-  function bindEvents() {
-    document.querySelectorAll("[data-action]").forEach(function (el) {
-      el.addEventListener("click", function () {
-        var action = el.getAttribute("data-action");
-        if (action === "refresh") refresh();
-        if (action === "analyze") runAnalyze();
-        if (action === "explain") runExplain();
-        if (action === "act") runAct();
-      });
-    });
-    document.querySelectorAll("[data-select]").forEach(function (el) {
-      el.addEventListener("click", function () {
-        state.selected = el.getAttribute("data-select");
-        render();
-      });
-    });
-    var select = document.getElementById("nodeSelect");
-    if (select) {
-      select.addEventListener("change", function () {
-        state.selected = select.value;
-        render();
-      });
-    }
-    var key = document.getElementById("apiKey");
-    if (key) {
-      key.addEventListener("input", function () {
-        state.apiKey = key.value;
-        localStorage.setItem("absia_api_key", state.apiKey);
-      });
-    }
+  /* ── Main render ─────────────────────────────────────────────── */
+  function render() {
+    document.getElementById("app").innerHTML = [
+      '<div class="shell">',
+        renderHeader(),
+        '<div class="page">',
+          renderKpis(),
+          '<div class="body-grid">',
+            renderServicesCol(),
+            renderMiddleCol(),
+            renderRightCol(),
+          '</div>',
+        '</div>',
+      '</div>'
+    ].join("");
+    bind();
   }
 
+  /* ── Event binding ───────────────────────────────────────────── */
+  function bind() {
+    document.querySelectorAll("[data-action]").forEach(function(el) {
+      el.addEventListener("click", function() {
+        var a = el.getAttribute("data-action");
+        if (a==="refresh")  refresh();
+        if (a==="diagnose") runDiagnose();
+      });
+    });
+    document.querySelectorAll("[data-select]").forEach(function(el) {
+      el.addEventListener("click", function() {
+        S.selected = el.getAttribute("data-select");
+        S.result=null; S.error="";
+        render();
+      });
+    });
+    var sel = document.getElementById("nodeSelect");
+    if (sel) sel.addEventListener("change", function() {
+      S.selected = sel.value;
+      S.result=null; S.error="";
+      render();
+    });
+    var key = document.getElementById("apiKey");
+    if (key) key.addEventListener("input", function() {
+      S.apiKey = key.value;
+      localStorage.setItem("absia_api_key", S.apiKey);
+    });
+  }
+
+  /* ── Boot ────────────────────────────────────────────────────── */
   render();
   refresh();
-  refreshTimer = setInterval(refresh, 5000);
-  window.addEventListener("beforeunload", function () {
+  refreshTimer = setInterval(refresh, 10000);
+  window.addEventListener("beforeunload", function() {
     if (refreshTimer) clearInterval(refreshTimer);
-    if (phaseTimer) clearInterval(phaseTimer);
+    if (phaseTimer)   clearInterval(phaseTimer);
   });
+
 })();
 </script>
 </body>
