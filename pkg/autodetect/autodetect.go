@@ -23,7 +23,8 @@ const (
 
 	// statsInterval is how often per-container CPU/memory stats are polled
 	// and pushed into the metrics store.
-	statsInterval = 15 * time.Second
+	// 8s × 4 samples = 32 seconds to first real pipeline run.
+	statsInterval = 8 * time.Second
 )
 
 // ContainerInfo is the minimal metadata exposed to callers (e.g. NodesHandler).

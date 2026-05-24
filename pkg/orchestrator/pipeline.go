@@ -656,27 +656,43 @@ func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 	if len(nodeIDs) == 0 {
 		return nil
 	}
-	minLen := math.MaxInt32
+
+	// Only include nodes that have enough samples to contribute meaningfully.
+	// Nodes with fewer than 4 samples are excluded rather than truncating
+	// the entire dataset to their shorter length.
+	qualified := make([]string, 0, len(nodeIDs))
+	maxLen := 0
 	for _, id := range nodeIDs {
 		s := store.GetArrivalRateSeries(id)
-		if len(s) > 0 && len(s) < minLen {
-			minLen = len(s)
+		if len(s) >= 4 {
+			qualified = append(qualified, id)
+			if len(s) > maxLen {
+				maxLen = len(s)
+			}
 		}
 	}
-	if minLen == math.MaxInt32 || minLen < 4 {
+
+	// Need at least 2 nodes with real data for causal graph to be meaningful.
+	// A single node produces a trivial graph with no causal structure.
+	if len(qualified) < 2 || maxLen < 4 {
 		return nil
 	}
-	ds := &data.Dataset{Points: make([]data.DataPoint, minLen), Nodes: nodeIDs}
-	for t := 0; t < minLen; t++ {
+
+	ds := &data.Dataset{Points: make([]data.DataPoint, maxLen), Nodes: qualified}
+	for t := 0; t < maxLen; t++ {
 		ds.Points[t] = data.DataPoint{
 			Timestamp: float64(t),
 			Values:    make(map[string]float64),
 			Missing:   make(map[string]bool),
 		}
-		for _, id := range nodeIDs {
+		for _, id := range qualified {
 			series := store.GetArrivalRateSeries(id)
 			if t < len(series) {
 				ds.Points[t].Values[id] = series[t]
+			} else {
+				// Forward-fill: use the last known value for nodes with fewer samples.
+				// This is more accurate than marking as missing and avoids shrinking the dataset.
+				ds.Points[t].Values[id] = series[len(series)-1]
 			}
 		}
 	}
@@ -895,4 +911,3 @@ func (pr *PipelineResult) Summary() string {
 	}
 	return s
 }
-

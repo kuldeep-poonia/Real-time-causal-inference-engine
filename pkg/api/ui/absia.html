@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/*  Reset + tokens ─ */
+/* ── Reset + tokens ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -53,12 +53,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/*  Scrollbar ─ */
+/* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
 
-/*  Animations  */
+/* ── Animations ──────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
 @keyframes slidein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
@@ -71,14 +71,14 @@ body {
   50%      { transform: scale(1.6); opacity: 0.6; }
 }
 
-/*  Layout shell  */
+/* ── Layout shell ────────────────────────────────────────────────── */
 .shell {
   display: grid;
   grid-template-rows: 56px 1fr;
   min-height: 100vh;
 }
 
-/*  Header  */
+/* ── Header ──────────────────────────────────────────────────────── */
 .header {
   display: flex;
   align-items: center;
@@ -173,7 +173,7 @@ body {
 .icon-btn:hover { border-color: var(--teal-bd); color: var(--teal); background: var(--teal-dim); }
 .icon-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/*  Main canvas ─ */
+/* ── Main canvas ─────────────────────────────────────────────────── */
 .canvas {
   display: grid;
   grid-template-columns: 340px 1fr 360px;
@@ -181,7 +181,7 @@ body {
   height: calc(100vh - 56px);
 }
 
-/*  Shared panel styles ─ */
+/* ── Shared panel styles ─────────────────────────────────────────── */
 .col {
   overflow-y: auto;
   height: 100%;
@@ -213,7 +213,7 @@ body {
   font-weight: 500;
 }
 
-/*  KPI strip ─ */
+/* ── KPI strip ───────────────────────────────────────────────────── */
 .kpi-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -258,7 +258,7 @@ body {
   color: var(--dim);
 }
 
-/*  Full layout with KPI strip  */
+/* ── Full layout with KPI strip ──────────────────────────────────── */
 .page {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -273,7 +273,7 @@ body {
   height: 100%;
 }
 
-/*  Service cards (left col)  */
+/* ── Service cards (left col) ────────────────────────────────────── */
 .services-col {
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -366,7 +366,7 @@ body {
 .sc-stat-val { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
 .sc-stat-key { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
 
-/*  Middle col — command + analysis  */
+/* ── Middle col — command + analysis ────────────────────────────── */
 .middle-col {
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -374,7 +374,7 @@ body {
   flex-direction: column;
 }
 
-/*  Selected service detail ─ */
+/* ── Selected service detail ─────────────────────────────────────── */
 .detail-header {
   padding: 20px 24px 18px;
   border-bottom: 1px solid var(--border);
@@ -415,7 +415,7 @@ body {
 }
 .detail-sentence strong { color: var(--text); }
 
-/*  Actions strip ─ */
+/* ── Actions strip ───────────────────────────────────────────────── */
 .actions-strip {
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
@@ -464,7 +464,7 @@ body {
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: #000; border-radius: 50%; animation: spin 700ms linear infinite; flex-shrink: 0; }
 .spinner.light { border-color: rgba(255,255,255,.15); border-top-color: var(--muted); }
 
-/*  Pipeline track  */
+/* ── Pipeline track ──────────────────────────────────────────────── */
 .pipeline-track {
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
@@ -520,7 +520,7 @@ body {
 .pt-label.active { color: var(--teal); }
 .pt-label.done   { color: var(--muted); }
 
-/*  Analysis result ─ */
+/* ── Analysis result ─────────────────────────────────────────────── */
 .result-area {
   flex: 1;
   padding: 20px 24px;
@@ -597,7 +597,7 @@ body {
 .rstat-val { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text); }
 .rstat-key { font-size: 11px; color: var(--dim); margin-top: 2px; }
 
-/*  Impact list ─ */
+/* ── Impact list ─────────────────────────────────────────────────── */
 .impact-section { margin-bottom: 14px; }
 .section-label { font-size: 11px; font-weight: 600; letter-spacing: .10em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
 
@@ -616,7 +616,7 @@ body {
 .impact-bar-fill { height: 100%; border-radius: 3px; background: var(--teal); opacity: .8; transition: width .4s ease; }
 .impact-score { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 44px; text-align: right; }
 
-/*  Error / safety blocked  */
+/* ── Error / safety blocked ──────────────────────────────────────── */
 .alert-box {
   padding: 12px 14px;
   border-radius: 8px;
@@ -629,12 +629,12 @@ body {
 .alert-box.info { background: var(--blue-dim); border: 1px solid var(--blue-bd); color: var(--blue); }
 .alert-box strong { font-weight: 600; }
 
-/*  Right col — actions + settings ─ */
+/* ── Right col — actions + settings ─────────────────────────────── */
 .right-col {
   overflow-y: auto;
 }
 
-/*  Action policy section ─ */
+/* ── Action policy section ───────────────────────────────────────── */
 .r-section {
   padding: 18px 20px;
   border-bottom: 1px solid var(--border);
@@ -663,7 +663,7 @@ body {
 .ac-bar  { height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; margin-top: 10px; }
 .ac-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), #0095CC); border-radius: 2px; }
 
-/*  History ─ */
+/* ── History ─────────────────────────────────────────────────────── */
 .history-list { display: flex; flex-direction: column; gap: 6px; }
 .history-item {
   display: flex;
@@ -682,7 +682,7 @@ body {
 .hi-root { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hi-meta { font-size: 11px; color: var(--dim); }
 
-/*  API key field ─ */
+/* ── API key field ───────────────────────────────────────────────── */
 .field-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
 .field-input {
   width: 100%;
@@ -699,7 +699,7 @@ body {
 .field-input:focus { border-color: var(--teal-bd); }
 .field-input::placeholder { color: var(--dim); }
 
-/*  Empty states  */
+/* ── Empty states ────────────────────────────────────────────────── */
 .empty-col {
   display: flex;
   flex-direction: column;
@@ -724,7 +724,7 @@ body {
 }
 .empty-icon-lg svg { width: 24px; height: 24px; fill: none; stroke: var(--dim); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
-/*  Node select dropdown  */
+/* ── Node select dropdown ────────────────────────────────────────── */
 .node-select {
   width: 100%;
   padding: 8px 12px;
@@ -739,7 +739,7 @@ body {
   margin-bottom: 12px;
 }
 
-/*  Responsive  */
+/* ── Responsive ──────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .body-grid { grid-template-columns: 300px 1fr; }
   .right-col { display: none; }
@@ -759,7 +759,7 @@ body {
 (function () {
   "use strict";
 
-  /*  State ─ */
+  /* ── State ───────────────────────────────────────────────────── */
   var S = {
     health:      null,
     nodes:       [],
@@ -777,7 +777,7 @@ body {
   var phaseTimer   = null;
   var refreshTimer = null;
 
-  /*  Pipeline phase labels (human, not technical)  */
+  /* ── Pipeline phase labels (human, not technical) ────────────── */
   var PHASES = [
     { short: "Traffic",  long: "Reading traffic patterns" },
     { short: "Patterns", long: "Detecting anomalies"      },
@@ -786,7 +786,7 @@ body {
     { short: "Decision", long: "Safety check & ranking"   }
   ];
 
-  /*  Plain-English helpers ─ */
+  /* ── Plain-English helpers ───────────────────────────────────── */
   function friendlyName(id) {
     var v = String(id || "service");
     var l = v.toLowerCase();
@@ -809,22 +809,33 @@ body {
     return                         { key: "overloaded", label: "Overloaded",   score: 3 };
   }
 
+  // isDockerNode: Docker-sourced containers always have service_rate=1.0
+  // and arrival_rate in [0,1] representing CPU utilisation fraction.
+  function isDockerNode(node) {
+    return node && Math.abs((node.service_rate || 0) - 1.0) < 0.001 && (node.arrival_rate || 0) <= 1.0;
+  }
+
   function sentenceForNode(node) {
     if (!node) return "";
-    var load    = node.load || 0;
+    var load = node.load || 0;
+    var s    = statusKey(node);
+
+    if (isDockerNode(node)) {
+      var cpuPct = Math.round((node.arrival_rate || 0) * 100);
+      var memPct = Math.round(node.queue_length || 0);
+      if (s.key === "ok")       return "Running smoothly \u2014 " + cpuPct + "% CPU, " + memPct + "% memory.";
+      if (s.key === "watch")    return "CPU at " + cpuPct + "% \u2014 elevated but not critical. " + memPct + "% memory in use.";
+      if (s.key === "pressure") return "CPU running hot at " + cpuPct + "% \u2014 approaching its limit. " + memPct + "% memory.";
+      return "CPU maxed out at " + cpuPct + "% \u2014 container under heavy load. " + memPct + "% memory in use.";
+    }
+
     var qlen    = Math.round(node.queue_length || 0);
     var arrival = Math.round(node.arrival_rate || 0);
     var cap     = Math.round(node.service_rate || 0);
-    var name    = friendlyName(node.node_id);
-    var s       = statusKey(node);
-
-    if (s.key === "ok")
-      return "Handling traffic well — processing " + arrival + " req/s with capacity to spare.";
-    if (s.key === "watch")
-      return "Running at " + Math.round(load * 100) + "% of capacity. Worth monitoring but not critical.";
-    if (s.key === "pressure")
-      return "Under pressure. Receiving " + arrival + " req/s but capacity is " + cap + ". " + (qlen > 0 ? qlen + " requests waiting." : "");
-    return "Can't keep up with demand. " + arrival + " req/s in, only " + cap + " capacity. " + (qlen > 0 ? qlen + " requests stuck in queue." : "Backlog growing.");
+    if (s.key === "ok")       return "Handling " + arrival + " req/s comfortably \u2014 well within capacity.";
+    if (s.key === "watch")    return "At " + Math.round(load * 100) + "% of capacity. Worth monitoring but not critical.";
+    if (s.key === "pressure") return "Receiving " + arrival + " req/s but capacity is only " + cap + ". " + (qlen > 0 ? qlen + " requests queued." : "");
+    return "Saturated \u2014 " + arrival + " req/s in, only " + cap + " capacity. " + (qlen > 0 ? qlen + " requests stuck in queue." : "Backlog growing.");
   }
 
   function confMeta(result) {
@@ -838,9 +849,10 @@ body {
   function analysisHeadline(result) {
     if (!result) return "";
     var root  = result.root_cause || result.physics_root_cause;
-    var name  = root ? friendlyName(root) : null;
+    // Single capital letter = synthetic internal node, not a real container
+    if (!root || isSyntheticNode(root)) return "No clear root cause found";
+    var name  = friendlyName(root);
     var cs    = (result.confidence_state || "UNKNOWN");
-    if (!name) return "No clear root cause found";
     if (cs === "CONFIRMED") return name + " is causing the problem";
     if (cs === "PROBABLE")  return name + " is the likely cause";
     return "Root cause unclear — more data needed";
@@ -849,6 +861,8 @@ body {
   function analysisStory(result) {
     if (!result) return "";
     var root  = result.root_cause || result.physics_root_cause;
+    // Filter internal synthetic node IDs (single capital letters A/B/C)
+    if (root && isSyntheticNode(root)) root = null;
     var name  = root ? friendlyName(root) : null;
     var score = Math.round((result.confidence_score || 0) * 100);
     var risk  = result.latent_risk || "UNKNOWN";
@@ -895,7 +909,7 @@ body {
     return parts.join(" ");
   }
 
-  /*  Utilities ─ */
+  /* ── Utilities ───────────────────────────────────────────────── */
   function esc(v) {
     return String(v == null ? "" : v)
       .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
@@ -918,7 +932,7 @@ body {
   function readJSON(k, fb) { try { var r=localStorage.getItem(k); return r?JSON.parse(r):fb; } catch(e){ return fb; } }
   function writeJSON(k,v)  { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} }
 
-  /*  SVG icons ─ */
+  /* ── SVG icons ───────────────────────────────────────────────── */
   var ICONS = {
     refresh:  '<polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>',
     search:   '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
@@ -938,7 +952,7 @@ body {
     return '<svg class="' + (cls||"icon-svg") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name]||"") + '</svg>';
   }
 
-  /*  API ─ */
+  /* ── API ─────────────────────────────────────────────────────── */
   function apiGet(path) {
     return fetch(path, { headers:{ Accept:"application/json" } })
       .then(function(r){ return r.json().then(function(j){ j.__st=r.status; return j; }).catch(function(){ return {__st:r.status,errors:["Bad JSON"]}; }); })
@@ -951,7 +965,7 @@ body {
       .then(function(r){ return r.json().then(function(j){ j.__st=r.status; return j; }); });
   }
 
-  /*  Sorting ─ */
+  /* ── Sorting ─────────────────────────────────────────────────── */
   function sorted() {
     return S.nodes.slice().sort(function(a,b){
       var d = statusKey(b).score - statusKey(a).score;
@@ -971,7 +985,7 @@ body {
     return { node_id:n.node_id, arrival_rate:n.arrival_rate, service_rate:Math.max(n.service_rate,1), queue_length:n.queue_length };
   }
 
-  /*  Busy / phase animation  */
+  /* ── Busy / phase animation ──────────────────────────────────── */
   function startBusy(mode) {
     stopBusy(false);
     S.busy=mode; S.error=""; S.phase=0;
@@ -992,7 +1006,7 @@ body {
     writeJSON("absia_history", S.history);
   }
 
-  /*  Data fetching ─ */
+  /* ── Data fetching ───────────────────────────────────────────── */
   async function refresh() {
     try {
       var [health, nodes] = await Promise.all([apiGet("/health"), apiGet("/nodes")]);
@@ -1047,7 +1061,7 @@ body {
     }
   }
 
-  /*  Render helpers  */
+  /* ── Render helpers ──────────────────────────────────────────── */
   function renderHeader() {
     var online = S.health && S.health.status==="ok";
     var real   = S.health && S.health.real_data_available;
@@ -1080,8 +1094,9 @@ body {
     var hot   = ns.filter(function(n){ return statusKey(n).score >= 2; }).length;
     var ready = ns.filter(function(n){ return n.pipeline_ready; }).length;
     var r     = S.result;
-    var conf  = r ? confMeta(r) : null;
-    var root  = r && (r.root_cause || r.physics_root_cause);
+    var conf  = r && r.data_source !== "synthetic" ? confMeta(r) : null;
+    var root  = r && r.data_source !== "synthetic" && (r.root_cause || r.physics_root_cause);
+    if (root && isSyntheticNode(root)) root = null;
 
     return [
       '<div class="kpi-strip">',
@@ -1144,9 +1159,16 @@ body {
           '<div class="sc-bar"><div class="sc-bar-fill ' + meta.key + '" style="width:' + w + '%"></div></div>',
         '</div>',
         '<div class="sc-stats">',
-          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.arrival_rate,0) + '</div><div class="sc-stat-key">In</div></div>',
-          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.service_rate,0) + '</div><div class="sc-stat-key">Capacity</div></div>',
-          '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.queue_length,0) + '</div><div class="sc-stat-key">Queued</div></div>',
+          isDockerNode(node)
+            ? [
+                '<div class="sc-stat"><div class="sc-stat-val">' + Math.round((node.arrival_rate||0)*100) + '%</div><div class="sc-stat-key">CPU</div></div>',
+                '<div class="sc-stat"><div class="sc-stat-val">' + Math.round(node.queue_length||0) + '%</div><div class="sc-stat-key">Memory</div></div>',
+              ].join("")
+            : [
+                '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.arrival_rate,0) + '</div><div class="sc-stat-key">In/s</div></div>',
+                '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.service_rate,0) + '</div><div class="sc-stat-key">Capacity</div></div>',
+                '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.queue_length,0) + '</div><div class="sc-stat-key">Queued</div></div>',
+              ].join(""),
           '<div class="sc-stat"><div class="sc-stat-val">' + fmt(node.sample_count,0) + '</div><div class="sc-stat-key">Samples</div></div>',
         '</div>',
       '</button>'
@@ -1212,28 +1234,52 @@ body {
   }
 
   function renderDetailHeader(node) {
-    var meta = statusKey(node);
-    var load = node.load || 0;
-    var over = load > 1 ? Math.round((load-1)*100)+"% over capacity" : Math.round(load*100)+"% of capacity";
+    var meta   = statusKey(node);
+    var load   = node.load || 0;
+    var docker = isDockerNode(node);
+    var loadColor = load >= 1 ? "red" : load >= 0.85 ? "amber" : "teal";
+
+    var cell1 = [
+      '<div class="dm-cell">',
+        '<div class="dm-val ' + loadColor + '">' + pct(load) + '</div>',
+        '<div class="dm-key">' + (load > 1 ? Math.round((load-1)*100)+"% over limit" : Math.round(load*100)+"% utilised") + '</div>',
+      '</div>'
+    ].join("");
+
+    var cell2, cell3;
+    if (docker) {
+      cell2 = [
+        '<div class="dm-cell">',
+          '<div class="dm-val">' + Math.round((node.arrival_rate||0)*100) + '%</div>',
+          '<div class="dm-key">CPU usage</div>',
+        '</div>'
+      ].join("");
+      cell3 = [
+        '<div class="dm-cell">',
+          '<div class="dm-val">' + Math.round(node.queue_length||0) + '%</div>',
+          '<div class="dm-key">Memory usage</div>',
+        '</div>'
+      ].join("");
+    } else {
+      cell2 = [
+        '<div class="dm-cell">',
+          '<div class="dm-val">' + fmt(node.arrival_rate,0) + '</div>',
+          '<div class="dm-key">Requests/sec in</div>',
+        '</div>'
+      ].join("");
+      cell3 = [
+        '<div class="dm-cell">',
+          '<div class="dm-val">' + fmt(node.service_rate,0) + '</div>',
+          '<div class="dm-key">Requests/sec capacity</div>',
+        '</div>'
+      ].join("");
+    }
 
     return [
       '<div class="detail-header">',
         '<div class="detail-name">' + esc(friendlyName(node.node_id)) + '</div>',
         '<div class="detail-id">' + esc(node.node_id) + '  ·  sampled ' + esc(reltime(node.last_seen)) + '</div>',
-        '<div class="detail-metrics">',
-          '<div class="dm-cell">',
-            '<div class="dm-val ' + (load >= 1 ? "red" : load >= 0.85 ? "amber" : "teal") + '">' + pct(load) + '</div>',
-            '<div class="dm-key">' + esc(over) + '</div>',
-          '</div>',
-          '<div class="dm-cell">',
-            '<div class="dm-val">' + fmt(node.arrival_rate,0) + '</div>',
-            '<div class="dm-key">Incoming req/s</div>',
-          '</div>',
-          '<div class="dm-cell">',
-            '<div class="dm-val">' + fmt(node.service_rate,0) + '</div>',
-            '<div class="dm-key">Processing capacity</div>',
-          '</div>',
-        '</div>',
+        '<div class="detail-metrics">' + cell1 + cell2 + cell3 + '</div>',
         '<div class="detail-sentence">' + esc(sentenceForNode(node)) + '</div>',
       '</div>'
     ].join("");
@@ -1289,15 +1335,35 @@ body {
     ].join("");
   }
 
+  // isSyntheticNode: single capital letter = pipeline internal node (A, B, C)
+  function isSyntheticNode(name) {
+    return typeof name === "string" && /^[A-Z]$/.test(name.trim());
+  }
+
+  // cleanReason: converts internal safety gate codes to plain English
+  function cleanReason(r) {
+    var map = {
+      "LATENT_HIGH_RISK":        "a hidden cause is suspected",
+      "LOW_CONFIDENCE":          "confidence is too low",
+      "SEVERE_COVERAGE_COLLAPSE":"not enough data points",
+      "RANKING_INSTABILITY":     "root cause ranking is unstable",
+      "UNKNOWN_STATE":           "analysis state is unclear"
+    };
+    return map[r] || r.toLowerCase().replace(/_/g, " ");
+  }
+
   function renderFallbackWarning(safety) {
     if (!safety) return "";
-    var reasons = safety.fallback_reasons || [];
-    var probes  = safety.probe_nodes || safety.probe_recommendations || [];
+    var reasons = (safety.fallback_reasons || []).map(cleanReason);
+    // Filter probes that are internal synthetic node names or contain colons (internal paths)
+    var probes = (safety.probe_nodes || safety.probe_recommendations || [])
+      .filter(function(p){ return !isSyntheticNode(p) && !p.includes(":"); })
+      .map(friendlyName);
     if (!reasons.length && !probes.length) return "";
     return [
       '<div class="alert-box warn">',
-        reasons.length ? '<strong>Why confidence is low:</strong> ' + esc(reasons.join(", ")) + (probes.length?"<br>":"") : "",
-        probes.length ? '<strong>Investigate next:</strong> ' + esc(probes.join(", ")) : "",
+        reasons.length ? '<strong>Why not yet confident:</strong> ' + esc(reasons.join(", ")) + (probes.length?"<br>":"") : "",
+        probes.length ? '<strong>Check these services:</strong> ' + esc(probes.join(", ")) : "",
       '</div>'
     ].join("");
   }
@@ -1305,11 +1371,38 @@ body {
   function renderFullResult() {
     var r    = S.result;
     var act  = r.act || {};
+
+    // ── Synthetic data gate ─────────────────────────────────────────────────
+    // When the pipeline hasn't collected enough real samples yet it falls back
+    // to a synthetic dataset (nodes A, B, C). Showing that result as if it
+    // describes the user's actual system would be misleading. Block it.
+    if (r.data_source === "synthetic") {
+      var sc = r.sample_count || 0;
+      return [
+        '<div class="result-story">',
+          '<div class="result-verdict"><span class="verdict-pill warn">Collecting data</span></div>',
+          '<div class="result-headline">Not enough data yet</div>',
+          '<div class="result-body">',
+            'ABSIA needs at least <strong>4 metric samples per container</strong> before it can run a meaningful causal analysis. ',
+            'Samples are collected every 8 seconds, so real analysis starts <strong>around 32 seconds after your containers start</strong>. ',
+            'Wait a moment and run the diagnosis again.',
+          '</div>',
+          '<div class="result-stats">',
+            '<div class="rstat"><div class="rstat-val" style="color:var(--amber)">~' + Math.max(0, 4 - sc) + '</div><div class="rstat-key">Samples still needed</div></div>',
+            '<div class="rstat"><div class="rstat-val">8s</div><div class="rstat-key">Collection interval</div></div>',
+            '<div class="rstat"><div class="rstat-val">' + (r.node_count || S.nodes.length) + '</div><div class="rstat-key">Containers watched</div></div>',
+          '</div>',
+        '</div>'
+      ].join("");
+    }
+
     var meta = confMeta(r);
     var root = r.root_cause || r.physics_root_cause;
 
     var effects = r.backdoor_effects || r.causes || {};
     var effectEntries = Object.keys(effects)
+      // Filter out single-letter synthetic node names (A, B, C)
+      .filter(function(k){ return !isSyntheticNode(k); })
       .map(function(k){ return [k, Number(effects[k])||0]; })
       .sort(function(a,b){ return Math.abs(b[1])-Math.abs(a[1]); })
       .slice(0,5);
@@ -1317,7 +1410,7 @@ body {
       ? Math.max.apply(null, effectEntries.map(function(e){ return Math.abs(e[1]); }))
       : 1;
 
-    //  Section 1: Root cause story 
+    // ── Section 1: Root cause story ──
     var s1 = [
       '<div class="result-story">',
         '<div class="result-verdict">',
@@ -1334,7 +1427,7 @@ body {
       '</div>'
     ].join("");
 
-    //  Section 2: Evidence — what's being impacted 
+    // ── Section 2: Evidence — what's being impacted ──
     var s2 = effectEntries.length ? [
       '<div class="impact-section">',
         '<div class="section-label">What\'s being impacted</div>',
@@ -1351,7 +1444,7 @@ body {
       '</div>'
     ].join("") : "";
 
-    //  Section 3: Actions (or safety gate block) 
+    // ── Section 3: Actions (or safety gate block) ──
     var s3 = "";
     if (act.success === false) {
       s3 = [
@@ -1384,7 +1477,7 @@ body {
       }
     }
 
-    //  Fallback reasons 
+    // ── Fallback reasons ──
     var s4 = renderFallbackWarning(r.safety || r);
 
     return s1 + s2 + s3 + s4;
@@ -1455,7 +1548,7 @@ body {
     ].join("");
   }
 
-  /*  Main render ─ */
+  /* ── Main render ─────────────────────────────────────────────── */
   function render() {
     document.getElementById("app").innerHTML = [
       '<div class="shell">',
@@ -1473,7 +1566,7 @@ body {
     bind();
   }
 
-  /*  Event binding ─ */
+  /* ── Event binding ───────────────────────────────────────────── */
   function bind() {
     document.querySelectorAll("[data-action]").forEach(function(el) {
       el.addEventListener("click", function() {
@@ -1502,7 +1595,7 @@ body {
     });
   }
 
-  /*  Boot  */
+  /* ── Boot ────────────────────────────────────────────────────── */
   render();
   refresh();
   refreshTimer = setInterval(refresh, 10000);
