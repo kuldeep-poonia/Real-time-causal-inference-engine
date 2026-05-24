@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ── Reset + tokens ───────────────────────────────────────────────── */
+/*  Reset + tokens ─ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -53,12 +53,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Scrollbar ───────────────────────────────────────────────────── */
+/*  Scrollbar ─ */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
 
-/* ── Animations ──────────────────────────────────────────────────── */
+/*  Animations  */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
 @keyframes slidein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
@@ -71,14 +71,14 @@ body {
   50%      { transform: scale(1.6); opacity: 0.6; }
 }
 
-/* ── Layout shell ────────────────────────────────────────────────── */
+/*  Layout shell  */
 .shell {
   display: grid;
   grid-template-rows: 56px 1fr;
   min-height: 100vh;
 }
 
-/* ── Header ──────────────────────────────────────────────────────── */
+/*  Header  */
 .header {
   display: flex;
   align-items: center;
@@ -173,7 +173,7 @@ body {
 .icon-btn:hover { border-color: var(--teal-bd); color: var(--teal); background: var(--teal-dim); }
 .icon-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ── Main canvas ─────────────────────────────────────────────────── */
+/*  Main canvas ─ */
 .canvas {
   display: grid;
   grid-template-columns: 340px 1fr 360px;
@@ -181,7 +181,7 @@ body {
   height: calc(100vh - 56px);
 }
 
-/* ── Shared panel styles ─────────────────────────────────────────── */
+/*  Shared panel styles ─ */
 .col {
   overflow-y: auto;
   height: 100%;
@@ -213,7 +213,7 @@ body {
   font-weight: 500;
 }
 
-/* ── KPI strip ───────────────────────────────────────────────────── */
+/*  KPI strip ─ */
 .kpi-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -258,7 +258,7 @@ body {
   color: var(--dim);
 }
 
-/* ── Full layout with KPI strip ──────────────────────────────────── */
+/*  Full layout with KPI strip  */
 .page {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -273,7 +273,7 @@ body {
   height: 100%;
 }
 
-/* ── Service cards (left col) ────────────────────────────────────── */
+/*  Service cards (left col)  */
 .services-col {
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -366,7 +366,7 @@ body {
 .sc-stat-val { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
 .sc-stat-key { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
 
-/* ── Middle col — command + analysis ────────────────────────────── */
+/*  Middle col — command + analysis  */
 .middle-col {
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -374,7 +374,7 @@ body {
   flex-direction: column;
 }
 
-/* ── Selected service detail ─────────────────────────────────────── */
+/*  Selected service detail ─ */
 .detail-header {
   padding: 20px 24px 18px;
   border-bottom: 1px solid var(--border);
@@ -415,7 +415,7 @@ body {
 }
 .detail-sentence strong { color: var(--text); }
 
-/* ── Actions strip ───────────────────────────────────────────────── */
+/*  Actions strip ─ */
 .actions-strip {
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
@@ -464,7 +464,7 @@ body {
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: #000; border-radius: 50%; animation: spin 700ms linear infinite; flex-shrink: 0; }
 .spinner.light { border-color: rgba(255,255,255,.15); border-top-color: var(--muted); }
 
-/* ── Pipeline track ──────────────────────────────────────────────── */
+/*  Pipeline track  */
 .pipeline-track {
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
@@ -520,7 +520,7 @@ body {
 .pt-label.active { color: var(--teal); }
 .pt-label.done   { color: var(--muted); }
 
-/* ── Analysis result ─────────────────────────────────────────────── */
+/*  Analysis result ─ */
 .result-area {
   flex: 1;
   padding: 20px 24px;
@@ -597,7 +597,7 @@ body {
 .rstat-val { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text); }
 .rstat-key { font-size: 11px; color: var(--dim); margin-top: 2px; }
 
-/* ── Impact list ─────────────────────────────────────────────────── */
+/*  Impact list ─ */
 .impact-section { margin-bottom: 14px; }
 .section-label { font-size: 11px; font-weight: 600; letter-spacing: .10em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
 
@@ -616,7 +616,7 @@ body {
 .impact-bar-fill { height: 100%; border-radius: 3px; background: var(--teal); opacity: .8; transition: width .4s ease; }
 .impact-score { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 44px; text-align: right; }
 
-/* ── Error / safety blocked ──────────────────────────────────────── */
+/*  Error / safety blocked  */
 .alert-box {
   padding: 12px 14px;
   border-radius: 8px;
@@ -629,12 +629,12 @@ body {
 .alert-box.info { background: var(--blue-dim); border: 1px solid var(--blue-bd); color: var(--blue); }
 .alert-box strong { font-weight: 600; }
 
-/* ── Right col — actions + settings ─────────────────────────────── */
+/*  Right col — actions + settings ─ */
 .right-col {
   overflow-y: auto;
 }
 
-/* ── Action policy section ───────────────────────────────────────── */
+/*  Action policy section ─ */
 .r-section {
   padding: 18px 20px;
   border-bottom: 1px solid var(--border);
@@ -663,7 +663,7 @@ body {
 .ac-bar  { height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; margin-top: 10px; }
 .ac-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), #0095CC); border-radius: 2px; }
 
-/* ── History ─────────────────────────────────────────────────────── */
+/*  History ─ */
 .history-list { display: flex; flex-direction: column; gap: 6px; }
 .history-item {
   display: flex;
@@ -682,7 +682,7 @@ body {
 .hi-root { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hi-meta { font-size: 11px; color: var(--dim); }
 
-/* ── API key field ───────────────────────────────────────────────── */
+/*  API key field ─ */
 .field-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
 .field-input {
   width: 100%;
@@ -699,7 +699,7 @@ body {
 .field-input:focus { border-color: var(--teal-bd); }
 .field-input::placeholder { color: var(--dim); }
 
-/* ── Empty states ────────────────────────────────────────────────── */
+/*  Empty states  */
 .empty-col {
   display: flex;
   flex-direction: column;
@@ -724,7 +724,7 @@ body {
 }
 .empty-icon-lg svg { width: 24px; height: 24px; fill: none; stroke: var(--dim); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ── Node select dropdown ────────────────────────────────────────── */
+/*  Node select dropdown  */
 .node-select {
   width: 100%;
   padding: 8px 12px;
@@ -739,7 +739,7 @@ body {
   margin-bottom: 12px;
 }
 
-/* ── Responsive ──────────────────────────────────────────────────── */
+/*  Responsive  */
 @media (max-width: 1100px) {
   .body-grid { grid-template-columns: 300px 1fr; }
   .right-col { display: none; }
@@ -759,7 +759,7 @@ body {
 (function () {
   "use strict";
 
-  /* ── State ───────────────────────────────────────────────────── */
+  /*  State ─ */
   var S = {
     health:      null,
     nodes:       [],
@@ -777,7 +777,7 @@ body {
   var phaseTimer   = null;
   var refreshTimer = null;
 
-  /* ── Pipeline phase labels (human, not technical) ────────────── */
+  /*  Pipeline phase labels (human, not technical)  */
   var PHASES = [
     { short: "Traffic",  long: "Reading traffic patterns" },
     { short: "Patterns", long: "Detecting anomalies"      },
@@ -786,7 +786,7 @@ body {
     { short: "Decision", long: "Safety check & ranking"   }
   ];
 
-  /* ── Plain-English helpers ───────────────────────────────────── */
+  /*  Plain-English helpers ─ */
   function friendlyName(id) {
     var v = String(id || "service");
     var l = v.toLowerCase();
@@ -895,7 +895,7 @@ body {
     return parts.join(" ");
   }
 
-  /* ── Utilities ───────────────────────────────────────────────── */
+  /*  Utilities ─ */
   function esc(v) {
     return String(v == null ? "" : v)
       .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
@@ -918,7 +918,7 @@ body {
   function readJSON(k, fb) { try { var r=localStorage.getItem(k); return r?JSON.parse(r):fb; } catch(e){ return fb; } }
   function writeJSON(k,v)  { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){} }
 
-  /* ── SVG icons ───────────────────────────────────────────────── */
+  /*  SVG icons ─ */
   var ICONS = {
     refresh:  '<polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>',
     search:   '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
@@ -938,7 +938,7 @@ body {
     return '<svg class="' + (cls||"icon-svg") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name]||"") + '</svg>';
   }
 
-  /* ── API ─────────────────────────────────────────────────────── */
+  /*  API ─ */
   function apiGet(path) {
     return fetch(path, { headers:{ Accept:"application/json" } })
       .then(function(r){ return r.json().then(function(j){ j.__st=r.status; return j; }).catch(function(){ return {__st:r.status,errors:["Bad JSON"]}; }); })
@@ -951,7 +951,7 @@ body {
       .then(function(r){ return r.json().then(function(j){ j.__st=r.status; return j; }); });
   }
 
-  /* ── Sorting ─────────────────────────────────────────────────── */
+  /*  Sorting ─ */
   function sorted() {
     return S.nodes.slice().sort(function(a,b){
       var d = statusKey(b).score - statusKey(a).score;
@@ -971,7 +971,7 @@ body {
     return { node_id:n.node_id, arrival_rate:n.arrival_rate, service_rate:Math.max(n.service_rate,1), queue_length:n.queue_length };
   }
 
-  /* ── Busy / phase animation ──────────────────────────────────── */
+  /*  Busy / phase animation  */
   function startBusy(mode) {
     stopBusy(false);
     S.busy=mode; S.error=""; S.phase=0;
@@ -992,7 +992,7 @@ body {
     writeJSON("absia_history", S.history);
   }
 
-  /* ── Data fetching ───────────────────────────────────────────── */
+  /*  Data fetching ─ */
   async function refresh() {
     try {
       var [health, nodes] = await Promise.all([apiGet("/health"), apiGet("/nodes")]);
@@ -1047,7 +1047,7 @@ body {
     }
   }
 
-  /* ── Render helpers ──────────────────────────────────────────── */
+  /*  Render helpers  */
   function renderHeader() {
     var online = S.health && S.health.status==="ok";
     var real   = S.health && S.health.real_data_available;
@@ -1317,7 +1317,7 @@ body {
       ? Math.max.apply(null, effectEntries.map(function(e){ return Math.abs(e[1]); }))
       : 1;
 
-    // ── Section 1: Root cause story ──
+    //  Section 1: Root cause story 
     var s1 = [
       '<div class="result-story">',
         '<div class="result-verdict">',
@@ -1334,7 +1334,7 @@ body {
       '</div>'
     ].join("");
 
-    // ── Section 2: Evidence — what's being impacted ──
+    //  Section 2: Evidence — what's being impacted 
     var s2 = effectEntries.length ? [
       '<div class="impact-section">',
         '<div class="section-label">What\'s being impacted</div>',
@@ -1351,7 +1351,7 @@ body {
       '</div>'
     ].join("") : "";
 
-    // ── Section 3: Actions (or safety gate block) ──
+    //  Section 3: Actions (or safety gate block) 
     var s3 = "";
     if (act.success === false) {
       s3 = [
@@ -1384,7 +1384,7 @@ body {
       }
     }
 
-    // ── Fallback reasons ──
+    //  Fallback reasons 
     var s4 = renderFallbackWarning(r.safety || r);
 
     return s1 + s2 + s3 + s4;
@@ -1455,7 +1455,7 @@ body {
     ].join("");
   }
 
-  /* ── Main render ─────────────────────────────────────────────── */
+  /*  Main render ─ */
   function render() {
     document.getElementById("app").innerHTML = [
       '<div class="shell">',
@@ -1473,7 +1473,7 @@ body {
     bind();
   }
 
-  /* ── Event binding ───────────────────────────────────────────── */
+  /*  Event binding ─ */
   function bind() {
     document.querySelectorAll("[data-action]").forEach(function(el) {
       el.addEventListener("click", function() {
@@ -1502,7 +1502,7 @@ body {
     });
   }
 
-  /* ── Boot ────────────────────────────────────────────────────── */
+  /*  Boot  */
   render();
   refresh();
   refreshTimer = setInterval(refresh, 10000);
