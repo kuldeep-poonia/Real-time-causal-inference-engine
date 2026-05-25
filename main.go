@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -89,25 +88,6 @@ func main() {
 	// SIGINT covers Ctrl-C in development.
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-
-	// ── Pipeline smoke-test: validates all 5 phases are wired correctly
-	// before accepting live traffic. Fast (~50ms); fails fast on misconfiguration.
-	structLog.Info("running pipeline smoke-test", slog.String("params", "arrival=10, service=8, queue=5"))
-	result, err := orchestrator.ExecuteFullPipeline(10.0, 8.0, 5.0)
-	if err != nil {
-		log.Fatalf("[ABSIA] Pipeline smoke-test failed: %v", err)
-	}
-	fmt.Println(result.Summary())
-
-	if result.SafetyResult != nil {
-		structLog.Info("smoke-test safety gate",
-			slog.String("state", result.SafetyResult.Confidence.State.String()),
-			slog.Float64("confidence", result.SafetyResult.Confidence.Score),
-			slog.String("risk", result.SafetyResult.LatentRisk.Level.String()),
-			slog.Bool("fallback", result.SafetyResult.Fallback.IsUnknown),
-			slog.Float64("execution_time_ms", result.ExecutionTimeMS),
-		)
-	}
 
 	// ── HTTP server
 	port := 8080

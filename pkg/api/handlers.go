@@ -426,37 +426,27 @@ func requireAuth(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// runPipeline executes the orchestrator with the real store when data is available.
+// runPipeline executes the causal pipeline against the real metrics store.
+// Returns (nil, false) and writes an error response if the store has no data yet.
+// There is no synthetic fallback — the pipeline only runs on real container metrics.
 func runPipeline(w http.ResponseWriter, req MetricsRequest) (*orchestrator.PipelineResult, bool) {
-
-	// 🔥 REAL MODE (store se run karo)
-	if globalStore != nil && globalStore.HasRealData() {
-		result, err := orchestrator.ExecuteFullPipelineFromStore(
-			*req.ArrivalRate,
-			*req.ServiceRate,
-			*req.QueueLength,
-			globalStore,
-		)
-		if err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-				Success: false, Errors: []string{err.Error()},
-			})
-			return nil, false
-		}
-		return result, true
-	}
-
-	// 🔥 FALLBACK (manual input)
-	result, err := orchestrator.ExecuteFullPipeline(
-		*req.ArrivalRate, *req.ServiceRate, *req.QueueLength,
+	result, err := orchestrator.ExecuteFullPipelineFromStore(
+		*req.ArrivalRate,
+		*req.ServiceRate,
+		*req.QueueLength,
+		globalStore,
 	)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-			Success: false, Errors: []string{err.Error()},
+		status := http.StatusUnprocessableEntity
+		if globalStore == nil || !globalStore.HasRealData() {
+			status = http.StatusServiceUnavailable
+		}
+		writeJSON(w, status, ErrorResponse{
+			Success: false,
+			Errors:  []string{err.Error()},
 		})
 		return nil, false
 	}
-
 	return result, true
 }
 
@@ -729,18 +719,13 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		// Fallback to synthetic defaults if still missing
+		// Fallback to request metric values if the store has no sample for this node yet.
 		if req.ArrivalRate == nil {
-			defaultArrival := 10.0
-			req.ArrivalRate = &defaultArrival
-		}
-		if req.ServiceRate == nil {
-			defaultService := 15.0
-			req.ServiceRate = &defaultService
-		}
-		if req.QueueLength == nil {
-			defaultQueue := 5.0
-			req.QueueLength = &defaultQueue
+			writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{
+				Success: false,
+				Errors:  []string{"no metrics available for this container yet — collecting every 8 seconds, real analysis starts after ~32 seconds"},
+			})
+			return
 		}
 	}
 
@@ -1014,24 +999,13 @@ type ServerConfig struct {
 	IdleTimeoutSeconds  int
 }
 
-// metricsHandler exposes ABSIA operational metrics in Prometheus text format
-// (https://prometheus.io/docs/instrumenting/exposition_formats/).
-// No external dependency — the format is plain text, trivially hand-written.
-//
-// Exposed metrics:
-//
-//	absia_nodes_total          – number of distinct nodes in the metrics store
-//	absia_nodes_with_data      – nodes with ≥4 samples (pipeline-ready)
-//	absia_store_samples_total  – sum of all stored samples across all nodes
-//	absia_docker_available     – 1 if Docker socket is reachable, else 0
+// metricsHandler exposes ABSIA operational metrics in Prometheus text exposition format.
+// No external dependency — the format is plain text.
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-
-	nodeCount := 0
-	nodesWithData := 0
-	totalSamples := 0
+	nodeCount, nodesWithData, totalSamples := 0, 0, 0
 	if globalStore != nil {
 		ids := globalStore.GetAllNodeIDs()
 		nodeCount = len(ids)
@@ -1043,27 +1017,21 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 	dockerAvail := 0
 	if autodetect.IsDockerAvailable() {
 		dockerAvail = 1
 	}
-
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-
 	fmt.Fprintf(w, "# HELP absia_nodes_total Number of distinct nodes in the metrics store\n")
 	fmt.Fprintf(w, "# TYPE absia_nodes_total gauge\n")
 	fmt.Fprintf(w, "absia_nodes_total %d\n", nodeCount)
-
 	fmt.Fprintf(w, "# HELP absia_nodes_with_data Nodes with enough samples to run the pipeline (>=4)\n")
 	fmt.Fprintf(w, "# TYPE absia_nodes_with_data gauge\n")
 	fmt.Fprintf(w, "absia_nodes_with_data %d\n", nodesWithData)
-
 	fmt.Fprintf(w, "# HELP absia_store_samples_total Total samples stored across all nodes\n")
 	fmt.Fprintf(w, "# TYPE absia_store_samples_total counter\n")
 	fmt.Fprintf(w, "absia_store_samples_total %d\n", totalSamples)
-
 	fmt.Fprintf(w, "# HELP absia_docker_available 1 if the Docker socket is reachable\n")
 	fmt.Fprintf(w, "# TYPE absia_docker_available gauge\n")
 	fmt.Fprintf(w, "absia_docker_available %d\n", dockerAvail)

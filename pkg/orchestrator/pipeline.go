@@ -170,22 +170,18 @@ func setPrevRanking(target string, causes []string) {
 // PUBLIC ENTRY POINTS
 // ============================================================================
 
-// ExecuteFullPipeline keeps backward compatibility for tests.
-// Calls ExecuteFullPipelineFromStore with a nil store (synthetic data).
-func ExecuteFullPipeline(arrivalRate, serviceRate, queueLength float64) (*PipelineResult, error) {
-	return ExecuteFullPipelineFromStore(arrivalRate, serviceRate, queueLength, nil)
-}
-
-// ExecuteFullPipelineFromStore is the production entry point.
-// When store is non-nil and HasRealData() is true, real Prometheus/ingested
-// metrics flow through the pipeline. Otherwise it falls back to the
-// synthetic dataset so the API is always functional.
+// ExecuteFullPipelineFromStore is the sole production entry point.
+// It requires a non-nil store with real container metrics.
+// If the store is nil or has insufficient data it returns an explicit error
+// rather than silently substituting synthetic data.
+// Callers must wait for at least 2 containers to accumulate 4 samples each
+// (~32 seconds after startup with the default 8s collection interval).
 func ExecuteFullPipelineFromStore(
 	arrivalRate, serviceRate, queueLength float64,
 	store *metricsstore.Store,
 ) (*PipelineResult, error) {
 
-	startTime := time.Now() // Fix 5: record start for ExecutionTimeMS
+	startTime := time.Now()
 
 	result := &PipelineResult{ErrorsEncountered: make([]string, 0)}
 
@@ -199,50 +195,41 @@ func ExecuteFullPipelineFromStore(
 		return nil, fmt.Errorf("queueLength must be >= 0, got %f", queueLength)
 	}
 
-	log.Println("[ORCHESTRATOR] Starting full production pipeline...")
+	// ── Real data requirement ──────────────────────────────────────────────
+	// No synthetic fallback. If the store has no data yet, return a clear
+	// error so the API can surface a meaningful "still collecting" message.
+	if store == nil || !store.HasRealData() {
+		return nil, fmt.Errorf("no real data available yet: metrics are collected every 8 seconds, real analysis starts after ~32 seconds")
+	}
+
+	realisticData := convertStoreToDataset(store)
+	if realisticData == nil || len(realisticData.Points) < 4 {
+		return nil, fmt.Errorf("insufficient data: need at least 4 samples per container (collecting every 8s, real analysis starts after ~32s)")
+	}
+
+	result.DataSource = "real"
+
+	log.Printf("[ORCHESTRATOR] Starting pipeline: nodes=%v timesteps=%d",
+		realisticData.Nodes, len(realisticData.Points))
 
 	seed := getSeed()
-	ps := getPolicyStore()
+	ps   := getPolicyStore()
 
 	// ========================================================================
-	// DATA SOURCE
-	// ========================================================================
-	var realisticData *data.Dataset
-	useRealData := store != nil && store.HasRealData()
-
-	if useRealData {
-		log.Println("[ORCHESTRATOR] Using REAL metrics from store")
-		result.DataSource = "real"
-		realisticData = convertStoreToDataset(store)
-		if realisticData == nil || len(realisticData.Points) < 4 {
-			log.Println("[ORCHESTRATOR] Store data insufficient, falling back to synthetic")
-			useRealData = false
-		}
-	}
-	if !useRealData {
-		log.Println("[ORCHESTRATOR] Using SYNTHETIC metrics")
-		result.DataSource = "synthetic"
-		realisticData = data.GenerateRealisticCausalDataWithSeed(arrivalRate, 50, 0.5, 0.0, seed)
-	}
-
-	log.Printf("  -> Dataset: nodes=%v timesteps=%d source=%s",
-		realisticData.Nodes, len(realisticData.Points), result.DataSource)
-
 	// ========================================================================
 	// PHASE 1: SIGNAL PHYSICS
 	// ========================================================================
 	log.Println("[ORCHESTRATOR] Phase 1: signal physics...")
 
+	// Store is guaranteed non-nil here (checked at entry point).
 	var p1AR, p1SR, p1QL float64
-	if useRealData && len(realisticData.Nodes) > 0 {
+	if len(realisticData.Nodes) > 0 {
 		primaryNode := targetNodeOrDefault(realisticData.Nodes)
-		if store != nil {
-    if sample, ok := store.GetLatestSample(primaryNode); ok {
+		if sample, ok := store.GetLatestSample(primaryNode); ok {
 			p1AR = sample.ArrivalRate
 			p1SR = sample.ServiceRate
 			p1QL = sample.QueueLength
 		}
-	}
 	}
 	if p1SR <= 0 {
 		p1AR = arrivalRate
@@ -250,16 +237,15 @@ func ExecuteFullPipelineFromStore(
 		p1QL = queueLength
 	}
 	if p1SR <= 0 {
-    p1SR = serviceRate
-}
-p1Load := p1AR / p1SR
+		p1SR = 1.0
+	}
+	p1Load := p1AR / p1SR
 	result.Phase1NodeState = &phase1NodeState{
 		Load: p1Load, ArrivalRate: p1AR, ServiceRate: p1SR,
 		QueueLength: p1QL, ProcessingDelay: p1QL / p1SR, Timestamp: 0,
 	}
 	log.Printf("  -> rho=%.3f lambda=%.2f mu=%.2f", p1Load, p1AR, p1SR)
 
-	// ========================================================================
 	// PHASE 2: FULL PATTERN DETECTION
 	// ========================================================================
 	log.Println("[ORCHESTRATOR] Phase 2: full pattern detection...")
@@ -329,17 +315,15 @@ p1Load := p1AR / p1SR
 		if node, ok := discoveredGraph.Nodes[nodeID]; ok {
 			node.Series = series
 			var ns phase3.NodeState
-			if useRealData {
-				if sample, ok := store.GetLatestSample(nodeID); ok {
-					sr := sample.ServiceRate
-					if sr <= 0 {
-						sr = serviceRate
-					}
-					ns = phase3.NodeState{
-						ArrivalRate: sample.ArrivalRate, ServiceRate: sr,
-						Load: sample.ArrivalRate / sr, QueueLength: sample.QueueLength,
-						Timestamp: node.State.Timestamp,
-					}
+			if sample, ok := store.GetLatestSample(nodeID); ok {
+				sr := sample.ServiceRate
+				if sr <= 0 {
+					sr = serviceRate
+				}
+				ns = phase3.NodeState{
+					ArrivalRate: sample.ArrivalRate, ServiceRate: sr,
+					Load: sample.ArrivalRate / sr, QueueLength: sample.QueueLength,
+					Timestamp: node.State.Timestamp,
 				}
 			}
 			if ns.ServiceRate <= 0 {
