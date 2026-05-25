@@ -8,29 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
 )
-
-// ──────────────────────────────────────────────────────────────────────────────
-// TEST 05 — Full Pipeline End-to-End
-//
-// Runs the complete 5-phase pipeline with varied arrival/service/queue inputs
-// and verifies:
-//   · Phase1 rho computed correctly from inputs
-//   · Phase2 produces at least patterns or dynamics struct (no nil)
-//   · Phase3 produces a result OR safely errors with ErrorsEncountered populated
-//   · Phase4 explanation produced when Phase3 succeeds
-//   · Phase5 policy has at least 1 action when pipeline reaches it
-//   · SafetyResult is ALWAYS non-nil (contract: every run has safety eval)
-//   · Execution time is finite and > 0
-//   · Invalid inputs (serviceRate=0, negative) return error immediately
-//   · Zero-load system does not crash (rho=0)
-//   · Overloaded system (rho>1) returns UNKNOWN or safety fallback
-//   · DataSource is "real" or "synthetic" (never empty)
-//   · ErrorsEncountered never contains nil elements
-//
-// Output: results.json
-// ──────────────────────────────────────────────────────────────────────────────
 
 type PipelineCase struct {
 	CaseName          string   `json:"case_name"`
@@ -75,14 +55,14 @@ type InputGuardCase struct {
 }
 
 type SafetyContractCase struct {
-	CaseName      string `json:"case_name"`
+	CaseName      string  `json:"case_name"`
 	Lambda        float64 `json:"lambda"`
 	Mu            float64 `json:"mu"`
 	Q             float64 `json:"q"`
-	SafetyNonNil  bool   `json:"safety_result_never_nil"`
-	RhoOverloaded bool   `json:"system_overloaded_rho_gte_1"`
-	FallbackTrigg bool   `json:"fallback_triggered"`
-	StateValid    bool   `json:"state_is_valid_enum"`
+	SafetyNonNil  bool    `json:"safety_result_never_nil"`
+	RhoOverloaded bool    `json:"system_overloaded_rho_gte_1"`
+	FallbackTrigg bool    `json:"fallback_triggered"`
+	StateValid    bool    `json:"state_is_valid_enum"`
 }
 
 type E2EReport struct {
@@ -92,13 +72,13 @@ type E2EReport struct {
 	InputGuards    []InputGuardCase     `json:"input_guard_checks"`
 	SafetyContract []SafetyContractCase `json:"safety_contract_checks"`
 	Summary        struct {
-		TotalRuns         int     `json:"total_pipeline_runs"`
-		SafetyAlwaysSet   bool    `json:"safety_result_always_non_nil"`
-		ScoresAllBounded  bool    `json:"all_safety_scores_in_0_1"`
-		RhoCorrect        int     `json:"rho_correct_count"`
-		AvgExecTimeMS     float64 `json:"avg_exec_time_ms"`
-		InputGuardsPass   bool    `json:"input_guards_all_correct"`
-		Overall           string  `json:"overall_verdict"`
+		TotalRuns        int     `json:"total_pipeline_runs"`
+		SafetyAlwaysSet  bool    `json:"safety_result_always_non_nil"`
+		ScoresAllBounded bool    `json:"all_safety_scores_in_0_1"`
+		RhoCorrect       int     `json:"rho_correct_count"`
+		AvgExecTimeMS    float64 `json:"avg_exec_time_ms"`
+		InputGuardsPass  bool    `json:"input_guards_all_correct"`
+		Overall          string  `json:"overall_verdict"`
 	} `json:"summary"`
 }
 
@@ -110,21 +90,21 @@ func TestFullPipelineE2E(t *testing.T) {
 
 	// ── Main pipeline run cases ────────────────────────────────────────────────
 	type runCase struct {
-		name             string
-		lambda, mu, q    float64
-		expectedRho      float64
+		name          string
+		lambda, mu, q float64
+		expectedRho   float64
 	}
 	runCases := []runCase{
-		{"healthy_0.5_utilisation",       5.0,   10.0,  2.0,   0.50},
-		{"near_saturation_0.9",           9.0,   10.0,  9.0,   0.90},
-		{"overloaded_2x",                20.0,   10.0, 100.0,  2.00},
-		{"zero_arrival_idle",             0.1,   10.0,  0.0,   0.01},
-		{"extreme_overload_10x",         100.0,  10.0, 1000.0,10.00},
-		{"balanced_high_throughput",     500.0, 1000.0,  5.0,   0.50},
-		{"brink_of_saturation_0.95",      95.0,  100.0,100.0,  0.95},
-		{"low_service_high_queue",         1.0,    2.0, 50.0,   0.50},
-		{"microservice_spike",            99.0,  100.0, 990.0,  0.99},
-		{"minimal_valid_inputs",           0.01,   1.0,  0.0,   0.01},
+		{"healthy_0.5_utilisation", 5.0, 10.0, 2.0, 0.50},
+		{"near_saturation_0.9", 9.0, 10.0, 9.0, 0.90},
+		{"overloaded_2x", 20.0, 10.0, 100.0, 2.00},
+		{"zero_arrival_idle", 0.1, 10.0, 0.0, 0.01},
+		{"extreme_overload_10x", 100.0, 10.0, 1000.0, 10.00},
+		{"balanced_high_throughput", 500.0, 1000.0, 5.0, 0.50},
+		{"brink_of_saturation_0.95", 95.0, 100.0, 100.0, 0.95},
+		{"low_service_high_queue", 1.0, 2.0, 50.0, 0.50},
+		{"microservice_spike", 99.0, 100.0, 990.0, 0.99},
+		{"minimal_valid_inputs", 0.01, 1.0, 0.0, 0.01},
 	}
 
 	validStates := map[string]bool{
@@ -136,8 +116,9 @@ func TestFullPipelineE2E(t *testing.T) {
 	rhoCorrect := 0
 	totalExec := 0.0
 
+	store := metricsstore.New(4)
 	for _, rc := range runCases {
-		res, err := orchestrator.ExecuteFullPipeline(rc.lambda, rc.mu, rc.q)
+		res, err := orchestrator.ExecuteFullPipelineFromStore(rc.lambda, rc.mu, rc.q, store)
 		if err != nil {
 			t.Errorf("pipeline error [%s] (expected success): %v", rc.name, err)
 			report.PipelineCases = append(report.PipelineCases, PipelineCase{
@@ -160,7 +141,9 @@ func TestFullPipelineE2E(t *testing.T) {
 			expectedRho := rc.lambda / rc.mu
 			err := math.Abs(p1Rho - expectedRho)
 			p1RhoCorrect = err < 1e-6
-			if p1RhoCorrect { rhoCorrect++ }
+			if p1RhoCorrect {
+				rhoCorrect++
+			}
 			if !p1RhoCorrect {
 				t.Logf("rho mismatch [%s]: got=%.6f expected=%.6f", rc.name, p1Rho, expectedRho)
 			}
@@ -182,7 +165,9 @@ func TestFullPipelineE2E(t *testing.T) {
 		// Phase4
 		phase4Produced := res.Phase4Explanation != nil
 		phase4Causes := []string{}
-		if phase4Produced { phase4Causes = res.Phase4Explanation.Causes }
+		if phase4Produced {
+			phase4Causes = res.Phase4Explanation.Causes
+		}
 
 		// Phase5
 		phase5Actions := len(res.Phase5Actions)
@@ -226,7 +211,9 @@ func TestFullPipelineE2E(t *testing.T) {
 		// Errors slice — no nil strings or empty strings allowed
 		allErrOK := true
 		for _, e := range res.ErrorsEncountered {
-			if e == "" { allErrOK = false }
+			if e == "" {
+				allErrOK = false
+			}
 		}
 
 		report.PipelineCases = append(report.PipelineCases, PipelineCase{
@@ -237,7 +224,7 @@ func TestFullPipelineE2E(t *testing.T) {
 			Phase3Found: phase3Found, Phase3Target: phase3Target, Phase3Score: phase3Score,
 			Phase4Produced: phase4Produced, Phase4Causes: phase4Causes,
 			Phase5Actions: phase5Actions,
-			SafetyNonNil: safetyNonNil, SafetyState: safetyState,
+			SafetyNonNil:  safetyNonNil, SafetyState: safetyState,
 			SafetyScore: safetyScore, SafetyRisk: safetyRisk,
 			FallbackTriggered: fallbackTriggered, DataSource: res.DataSource,
 			ExecTimeMS: res.ExecutionTimeMS, ExecTimeValid: execValid,
@@ -252,17 +239,17 @@ func TestFullPipelineE2E(t *testing.T) {
 		lambda, mu, q float64
 		expectErr     bool
 	}{
-		{"negative_arrival",   -1.0,  10.0, 0.0,  true},
-		{"zero_service_rate",   5.0,   0.0, 0.0,  true},
-		{"negative_service",    5.0,  -5.0, 0.0,  true},
-		{"negative_queue",      5.0,  10.0, -1.0, true},
-		{"all_valid_minimal",   0.1,   1.0, 0.0,  false},
-		{"all_valid_standard",  5.0,  10.0, 2.0,  false},
+		{"negative_arrival", -1.0, 10.0, 0.0, true},
+		{"zero_service_rate", 5.0, 0.0, 0.0, true},
+		{"negative_service", 5.0, -5.0, 0.0, true},
+		{"negative_queue", 5.0, 10.0, -1.0, true},
+		{"all_valid_minimal", 0.1, 1.0, 0.0, false},
+		{"all_valid_standard", 5.0, 10.0, 2.0, false},
 	}
 
 	inputGuardsPass := true
 	for _, gc := range guardCases {
-		_, err := orchestrator.ExecuteFullPipeline(gc.lambda, gc.mu, gc.q)
+		_, err := orchestrator.ExecuteFullPipelineFromStore(gc.lambda, gc.mu, gc.q, store)
 		didErr := err != nil
 		correct := didErr == gc.expectErr
 		if !correct {
@@ -270,7 +257,9 @@ func TestFullPipelineE2E(t *testing.T) {
 			t.Errorf("input guard [%s]: expectErr=%v didErr=%v err=%v", gc.name, gc.expectErr, didErr, err)
 		}
 		errMsg := ""
-		if err != nil { errMsg = err.Error() }
+		if err != nil {
+			errMsg = err.Error()
+		}
 		report.InputGuards = append(report.InputGuards, InputGuardCase{
 			CaseName: gc.name, Lambda: gc.lambda, Mu: gc.mu, Q: gc.q,
 			ShouldError: gc.expectErr, DidError: didErr, ErrorMsg: errMsg,
@@ -283,14 +272,14 @@ func TestFullPipelineE2E(t *testing.T) {
 		name          string
 		lambda, mu, q float64
 	}{
-		{"overloaded_rho_2",     20.0,  10.0, 100.0},
-		{"overloaded_rho_10",   100.0,  10.0, 1000.0},
-		{"critical_rho_0.99",    99.0, 100.0, 990.0},
-		{"healthy_rho_0.5",       5.0,  10.0, 2.0},
+		{"overloaded_rho_2", 20.0, 10.0, 100.0},
+		{"overloaded_rho_10", 100.0, 10.0, 1000.0},
+		{"critical_rho_0.99", 99.0, 100.0, 990.0},
+		{"healthy_rho_0.5", 5.0, 10.0, 2.0},
 	}
 
 	for _, sc := range safetyContractCases {
-		res, err := orchestrator.ExecuteFullPipeline(sc.lambda, sc.mu, sc.q)
+		res, err := orchestrator.ExecuteFullPipelineFromStore(sc.lambda, sc.mu, sc.q, store)
 		if err != nil || res == nil {
 			report.SafetyContract = append(report.SafetyContract, SafetyContractCase{
 				CaseName: sc.name, SafetyNonNil: false,
@@ -326,7 +315,9 @@ func TestFullPipelineE2E(t *testing.T) {
 
 	// ── Summary ───────────────────────────────────────────────────────────────
 	avg := 0.0
-	if len(runCases) > 0 { avg = totalExec / float64(len(runCases)) }
+	if len(runCases) > 0 {
+		avg = totalExec / float64(len(runCases))
+	}
 
 	overall := "PASS"
 	if !safetyAlwaysSet || !allScoresBounded || !inputGuardsPass {

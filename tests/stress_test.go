@@ -34,71 +34,71 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 type LoadRun struct {
-	WorkerID       int     `json:"worker_id"`
-	Lambda         float64 `json:"lambda"`
-	Mu             float64 `json:"mu"`
-	Q              float64 `json:"q"`
-	Success        bool    `json:"success"`
-	ErrorMsg       string  `json:"error_if_any"`
-	SafetyNonNil   bool    `json:"safety_result_non_nil"`
-	ScoreBounded   bool    `json:"score_in_0_1"`
-	Score          float64 `json:"confidence_score"`
-	State          string  `json:"confidence_state"`
-	ExecTimeMS     float64 `json:"exec_time_ms"`
-	DataSource     string  `json:"data_source"`
-	NoPanic        bool    `json:"no_panic"`
+	WorkerID     int     `json:"worker_id"`
+	Lambda       float64 `json:"lambda"`
+	Mu           float64 `json:"mu"`
+	Q            float64 `json:"q"`
+	Success      bool    `json:"success"`
+	ErrorMsg     string  `json:"error_if_any"`
+	SafetyNonNil bool    `json:"safety_result_non_nil"`
+	ScoreBounded bool    `json:"score_in_0_1"`
+	Score        float64 `json:"confidence_score"`
+	State        string  `json:"confidence_state"`
+	ExecTimeMS   float64 `json:"exec_time_ms"`
+	DataSource   string  `json:"data_source"`
+	NoPanic      bool    `json:"no_panic"`
 }
 
 type ConcurrentBatch struct {
-	BatchName      string    `json:"batch_name"`
-	Workers        int       `json:"worker_count"`
-	TotalRuns      int       `json:"total_runs"`
-	Successes      int       `json:"successes"`
-	Panics         int       `json:"panics"`
-	SafetyNilCount int       `json:"safety_nil_count"`
-	NaNScores      int       `json:"nan_or_inf_scores"`
-	OutOfBoundScores int     `json:"scores_out_of_0_1"`
-	AvgExecMS      float64   `json:"avg_exec_time_ms"`
-	MaxExecMS      float64   `json:"max_exec_time_ms"`
-	Runs           []LoadRun `json:"per_worker_results"`
+	BatchName        string    `json:"batch_name"`
+	Workers          int       `json:"worker_count"`
+	TotalRuns        int       `json:"total_runs"`
+	Successes        int       `json:"successes"`
+	Panics           int       `json:"panics"`
+	SafetyNilCount   int       `json:"safety_nil_count"`
+	NaNScores        int       `json:"nan_or_inf_scores"`
+	OutOfBoundScores int       `json:"scores_out_of_0_1"`
+	AvgExecMS        float64   `json:"avg_exec_time_ms"`
+	MaxExecMS        float64   `json:"max_exec_time_ms"`
+	Runs             []LoadRun `json:"per_worker_results"`
 }
 
 type RankingIsolationCase struct {
-	CaseName    string   `json:"case_name"`
-	TargetA     string   `json:"target_a"`
-	TargetB     string   `json:"target_b"`
-	RankA       []string `json:"ranking_stored_for_a"`
-	RankB       []string `json:"ranking_stored_for_b"`
-	Isolated    bool     `json:"rankings_are_isolated"`
-	Details     string   `json:"details"`
+	CaseName string   `json:"case_name"`
+	TargetA  string   `json:"target_a"`
+	TargetB  string   `json:"target_b"`
+	RankA    []string `json:"ranking_stored_for_a"`
+	RankB    []string `json:"ranking_stored_for_b"`
+	Isolated bool     `json:"rankings_are_isolated"`
+	Details  string   `json:"details"`
 }
 
 type StoreIntegrationCase struct {
-	CaseName     string  `json:"case_name"`
-	NodesWritten int     `json:"nodes_written_concurrently"`
-	SamplesEach  int     `json:"samples_per_node"`
-	WindowSize   int     `json:"window_size"`
-	AllWithinWindow bool `json:"all_within_window_after"`
-	NoRaces      bool    `json:"no_data_race"`
-	PipelineRan  bool    `json:"pipeline_ran_on_real_store"`
-	SafetyOK     bool    `json:"safety_result_non_nil"`
+	CaseName        string `json:"case_name"`
+	NodesWritten    int    `json:"nodes_written_concurrently"`
+	SamplesEach     int    `json:"samples_per_node"`
+	WindowSize      int    `json:"window_size"`
+	AllWithinWindow bool   `json:"all_within_window_after"`
+	NoRaces         bool   `json:"no_data_race"`
+	PipelineRan     bool   `json:"pipeline_ran_on_real_store"`
+	SafetyOK        bool   `json:"safety_result_non_nil"`
 }
 
 type StressReport struct {
-	TestSuite         string                 `json:"test_suite"`
-	Timestamp         string                 `json:"timestamp_utc"`
-	Batches           []ConcurrentBatch      `json:"concurrent_batches"`
-	RankingIsolation  []RankingIsolationCase `json:"ranking_isolation"`
-	StoreIntegration  []StoreIntegrationCase `json:"store_integration_under_load"`
-	Summary           struct {
-		TotalWorkers      int     `json:"total_workers_across_all_batches"`
-		TotalPanics       int     `json:"total_panics"`
-		TotalSafetyNil    int     `json:"total_safety_nil"`
-		TotalNaNScores    int     `json:"total_nan_inf_scores"`
-		TotalOutOfBound   int     `json:"total_out_of_bound_scores"`
-		RankingIsolated   bool    `json:"ranking_isolation_holds"`
-		MaxBatchExecMS    float64 `json:"max_batch_exec_time_ms"`
-		Overall           string  `json:"overall_verdict"`
+	TestSuite        string                 `json:"test_suite"`
+	Timestamp        string                 `json:"timestamp_utc"`
+	Batches          []ConcurrentBatch      `json:"concurrent_batches"`
+	RankingIsolation []RankingIsolationCase `json:"ranking_isolation"`
+	StoreIntegration []StoreIntegrationCase `json:"store_integration_under_load"`
+	Summary          struct {
+		TotalWorkers    int     `json:"total_workers_across_all_batches"`
+		TotalPanics     int     `json:"total_panics"`
+		TotalSafetyNil  int     `json:"total_safety_nil"`
+		TotalNaNScores  int     `json:"total_nan_inf_scores"`
+		TotalOutOfBound int     `json:"total_out_of_bound_scores"`
+		RankingIsolated bool    `json:"ranking_isolation_holds"`
+		MaxBatchExecMS  float64 `json:"max_batch_exec_time_ms"`
+		Overall         string  `json:"overall_verdict"`
 	} `json:"summary"`
 }
 
@@ -124,7 +124,8 @@ func runWorker(workerID int, lambda, mu, q float64) LoadRun {
 		}()
 
 		start := time.Now()
-		res, err := orchestrator.ExecuteFullPipeline(lambda, mu, q)
+		store := metricsstore.New(4)
+		res, err := orchestrator.ExecuteFullPipelineFromStore(lambda, mu, q, store)
 		run.ExecTimeMS = float64(time.Since(start).Nanoseconds()) / 1e6
 
 		if err != nil {
@@ -217,10 +218,10 @@ func TestConcurrentStress(t *testing.T) {
 	for _, batch := range batches {
 		batchStart := time.Now()
 		var (
-			panicCount  int32
-			nilCount    int32
-			nanCount    int32
-			oobCount    int32
+			panicCount int32
+			nilCount   int32
+			nanCount   int32
+			oobCount   int32
 		)
 		runs := make([]LoadRun, batch.workers)
 		var wg sync.WaitGroup
@@ -256,17 +257,25 @@ func TestConcurrentStress(t *testing.T) {
 		wg.Wait()
 
 		batchExecMS := float64(time.Since(batchStart).Nanoseconds()) / 1e6
-		if batchExecMS > maxBatchExec { maxBatchExec = batchExecMS }
+		if batchExecMS > maxBatchExec {
+			maxBatchExec = batchExecMS
+		}
 
 		successes := 0
 		avgExec := 0.0
 		maxExec := 0.0
 		for _, r := range runs {
-			if r.Success { successes++ }
+			if r.Success {
+				successes++
+			}
 			avgExec += r.ExecTimeMS
-			if r.ExecTimeMS > maxExec { maxExec = r.ExecTimeMS }
+			if r.ExecTimeMS > maxExec {
+				maxExec = r.ExecTimeMS
+			}
 		}
-		if batch.workers > 0 { avgExec /= float64(batch.workers) }
+		if batch.workers > 0 {
+			avgExec /= float64(batch.workers)
+		}
 
 		pc := int(panicCount)
 		nc := int(nilCount)
@@ -298,7 +307,8 @@ func TestConcurrentStress(t *testing.T) {
 		// We test this by running the pipeline twice and reading back.
 		// Since we can't directly call setPrevRanking (unexported), we
 		// exercise it through the public API.
-		_, _ = orchestrator.ExecuteFullPipeline(5.0, 10.0, 2.0)
+		store := metricsstore.New(4)
+		_, _ = orchestrator.ExecuteFullPipelineFromStore(5.0, 10.0, 2.0, store)
 		rankA := orchestrator.GetPrevRanking(targetA)
 		rankB := orchestrator.GetPrevRanking(targetB)
 
@@ -310,7 +320,9 @@ func TestConcurrentStress(t *testing.T) {
 			// push a different value into A and check B is unchanged
 			if len(rankA) > 0 && len(rankB) > 0 {
 				origB0 := ""
-				if len(rankB) > 0 { origB0 = rankB[0] }
+				if len(rankB) > 0 {
+					origB0 = rankB[0]
+				}
 				rankA[0] = "MUTATED"
 				rankBAfter := orchestrator.GetPrevRanking(targetB)
 				if len(rankBAfter) > 0 && rankBAfter[0] == "MUTATED" {
@@ -408,7 +420,7 @@ func TestConcurrentStress(t *testing.T) {
 		}
 
 		report.StoreIntegration = append(report.StoreIntegration, StoreIntegrationCase{
-			CaseName: "concurrent_write_then_pipeline_read",
+			CaseName:     "concurrent_write_then_pipeline_read",
 			NodesWritten: len(nodes), SamplesEach: samplesEach, WindowSize: 20,
 			AllWithinWindow: allWithin, NoRaces: noRace.Load(),
 			PipelineRan: pipelineRan, SafetyOK: safetyOK,
@@ -418,7 +430,9 @@ func TestConcurrentStress(t *testing.T) {
 	// ── Summary ───────────────────────────────────────────────────────────────
 	rankingIsolated := true
 	for _, rc := range report.RankingIsolation {
-		if !rc.Isolated { rankingIsolated = false }
+		if !rc.Isolated {
+			rankingIsolated = false
+		}
 	}
 
 	overall := "PASS"
@@ -436,7 +450,9 @@ func TestConcurrentStress(t *testing.T) {
 
 	// Count total workers
 	totalWorkers := 0
-	for _, b := range report.Batches { totalWorkers += b.Workers }
+	for _, b := range report.Batches {
+		totalWorkers += b.Workers
+	}
 	report.Summary.TotalWorkers = totalWorkers
 
 	out, _ := json.MarshalIndent(report, "", "  ")
