@@ -436,9 +436,10 @@ func ExecuteFullPipelineFromStore(
 		return result, nil
 	}
 
-	if len(phase3Results[0].Causes) > 0 {
+	// Safe: result.Phase3Result is guaranteed non-nil here (set in the if-branch above).
+	if len(result.Phase3Result.Causes) > 0 {
 		backdoorEffects := make(map[string]float64)
-		for _, cause := range phase3Results[0].Causes {
+		for _, cause := range result.Phase3Result.Causes {
 			br := phase3.ComputeBackdoorEffect(discoveredGraph, temporalGraph,
 				cause.Node, targetNodeID)
 			backdoorEffects[cause.Node] = br.Effect
