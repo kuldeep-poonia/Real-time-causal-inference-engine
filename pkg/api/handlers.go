@@ -690,9 +690,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Safety:            sg,
 	}
 
-	if result.Phase3Result != nil {
-		resp.RootCause = result.Phase3Result.Target
-	}
+	resp.RootCause = result.PrimaryRootCause()
 	if result.Phase4Explanation != nil {
 		resp.Causes = result.Phase4Explanation.Effects
 	}
@@ -740,8 +738,8 @@ func ExplainHandler(w http.ResponseWriter, r *http.Request) {
 		Safety:            sg,
 	}
 
+	resp.RootCause = result.PrimaryRootCause()
 	if result.Phase3Result != nil {
-		resp.RootCause = result.Phase3Result.Target
 		causes := make([]string, len(result.Phase3Result.Causes))
 		for i, c := range result.Phase3Result.Causes {
 			causes[i] = c.Node

@@ -20,9 +20,9 @@ import (
 	phase5 "absia/internal/intelligence/phase5_insight"
 )
 
-// 
+//
 // RESULT TYPES
-// 
+//
 
 // SafetyResult holds the three mandatory safety-gate outputs.
 // No API response is returned without these being evaluated.
@@ -80,9 +80,31 @@ type PipelineResult struct {
 	DataSource        string // "real" | "synthetic"
 }
 
-// 
+// PrimaryRootCause returns the best root-cause node the pipeline has identified.
+// Queue physics wins when present because it is derived directly from lambda/mu
+// pressure and backlog, not just inferred graph topology.
+func (pr *PipelineResult) PrimaryRootCause() string {
+	if pr == nil {
+		return ""
+	}
+	if len(pr.PhysicsRootCauses) > 0 && pr.PhysicsRootCauses[0].NodeID != "" {
+		return pr.PhysicsRootCauses[0].NodeID
+	}
+	if pr.Phase4Explanation != nil && len(pr.Phase4Explanation.Causes) > 0 {
+		return pr.Phase4Explanation.Causes[0]
+	}
+	if pr.Phase3Result != nil && len(pr.Phase3Result.Causes) > 0 {
+		return pr.Phase3Result.Causes[0].Node
+	}
+	if pr.Phase3Result != nil {
+		return pr.Phase3Result.Target
+	}
+	return ""
+}
+
+//
 // PACKAGE-LEVEL CONFIGURATION
-// 
+//
 
 // pipelineSeed is the seed used for all deterministic random operations.
 // Defaults to 42; overrideable via SetSeed before first pipeline call.
@@ -126,12 +148,12 @@ func getPolicyStore() *policy.Store {
 	return pipelinePolicyStore
 }
 
-// 
+//
 // PER-TARGET RANKING STATE
 // Fix: was a single global slice, causing concurrent requests for different
 // targets to corrupt each other's ranking instability signal.
 // Now keyed by target node ID so each target has an independent prior.
-// 
+//
 
 var (
 	prevRankingMu       sync.RWMutex
@@ -166,9 +188,9 @@ func setPrevRanking(target string, causes []string) {
 	prevRankingByTarget[target] = dst
 }
 
-// 
+//
 // PUBLIC ENTRY POINTS
-// 
+//
 
 // ExecuteFullPipelineFromStore is the sole production entry point.
 // It requires a non-nil store with real container metrics.
@@ -203,12 +225,12 @@ func ExecuteFullPipelineFromStore(
 		realisticData.Nodes, len(realisticData.Points))
 
 	seed := getSeed()
-	ps   := getPolicyStore()
+	ps := getPolicyStore()
 
-	// 
-	// 
+	//
+	//
 	// PHASE 1: SIGNAL PHYSICS
-	// 
+	//
 	log.Println("[ORCHESTRATOR] Phase 1: signal physics...")
 
 	// Store is guaranteed non-nil here (checked at entry point).
@@ -235,7 +257,7 @@ func ExecuteFullPipelineFromStore(
 	log.Printf("  -> rho=%.3f lambda=%.2f mu=%.2f", p1Load, p1AR, p1SR)
 
 	// PHASE 2: FULL PATTERN DETECTION
-	// 
+	//
 	log.Println("[ORCHESTRATOR] Phase 2: full pattern detection...")
 
 	signalMatrix := buildSignalMatrix(realisticData)
@@ -281,9 +303,9 @@ func ExecuteFullPipelineFromStore(
 	}
 	log.Printf("  -> dynamics=%s patterns=%d", dynamics.Type, len(result.Phase2Patterns))
 
-	// 
+	//
 	// PHASE 3: CAUSAL GRAPH DISCOVERY + FULL CAUSAL ENGINE
-	// 
+	//
 	log.Println("[ORCHESTRATOR] Phase 3: causal graph + full causal engine...")
 
 	temporalGraph := buildTemporalGraph(realisticData)
@@ -370,25 +392,46 @@ func ExecuteFullPipelineFromStore(
 		log.Printf("  -> GraphManager updated: best graph prob=%.4f", graphMgr.Graphs[0].Probability)
 	}
 
+	targetNodeID := resolveTarget(targetNodeIDHint, realisticData.Nodes, discoveredGraph)
+	nodeStatesMap := buildNodeStatesMap(discoveredGraph)
+
+	const causalMinProbability = 0.1
+	const causalMinStrength = 0.05
+
 	hypotheses := phase3.BuildCausalHypotheses(discoveredGraph,
-		phase3.CausalBuilderConfig{MinProbability: 0.1, MinStrength: 0.05, MaxCauses: 5})
+		phase3.CausalBuilderConfig{MinProbability: causalMinProbability, MinStrength: causalMinStrength, MaxCauses: 5})
 	log.Printf("  -> hypotheses pre-filter: %d", len(hypotheses))
 
 	if len(hypotheses) == 0 {
 		result.ErrorsEncountered = append(result.ErrorsEncountered,
-			"Phase 3: no causal hypotheses — system may be stationary")
-		result.SafetyResult = evaluateSafetyGateEmpty(targetNodeOrDefault(realisticData.Nodes))
+			"Phase 3: no lagged causal hypotheses; using queue-physics fallback when available")
+		if finishWithLocalPhysicsRoot(result, targetNodeID, nodeStatesMap, startTime) {
+			return result, nil
+		}
+		result.SafetyResult = evaluateSafetyGateEmpty(targetNodeID)
 		result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
 		return result, nil
 	}
 
-	dsepEnrichment := RunDSeparationEnrichment(discoveredGraph)
-	backdoorEnrichment := RunBackdoorEnrichment(discoveredGraph, temporalGraph, dsepEnrichment)
+	causalGraph := pruneWeakCausalEdges(discoveredGraph, causalMinProbability, causalMinStrength)
+	if len(causalGraph.Edges) == 0 {
+		result.ErrorsEncountered = append(result.ErrorsEncountered,
+			"Phase 3: no usable causal edges after pruning; using queue-physics fallback when available")
+		if finishWithLocalPhysicsRoot(result, targetNodeID, nodeStatesMap, startTime) {
+			return result, nil
+		}
+		result.SafetyResult = evaluateSafetyGateEmpty(targetNodeID)
+		result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
+		return result, nil
+	}
+
+	dsepEnrichment := RunDSeparationEnrichment(causalGraph)
+	backdoorEnrichment := RunBackdoorEnrichment(causalGraph, temporalGraph, dsepEnrichment)
 	log.Printf("  -> d-sep enrichment: %d confirmed %d confounded edges",
 		len(dsepEnrichment.DSepConfirmed), len(dsepEnrichment.ConfoundedPairs))
 
 	for key, effect := range backdoorEnrichment.Effects {
-		for _, e := range discoveredGraph.Edges {
+		for _, e := range causalGraph.Edges {
 			if e.From+"->"+e.To == key {
 				if effect != 0 {
 					e.CausalStrength = effect
@@ -398,11 +441,20 @@ func ExecuteFullPipelineFromStore(
 		}
 	}
 
-	// Use the caller-requested node if it exists in the dataset.
-	// Fall back to mostDownstreamNode only when the hint is empty or absent.
-	targetNodeID := resolveTarget(targetNodeIDHint, realisticData.Nodes, discoveredGraph)
-	hypotheses = applyDSeparationFilter(hypotheses, discoveredGraph)
+	hypotheses = applyDSeparationFilter(hypotheses, causalGraph)
+	hypotheses = filterHypothesesForTarget(hypotheses, targetNodeID)
 	log.Printf("  -> D-sep filter: %d hypotheses survive", len(hypotheses))
+
+	if len(hypotheses) == 0 {
+		result.ErrorsEncountered = append(result.ErrorsEncountered,
+			"Phase 3: no causal hypotheses for requested target; using queue-physics fallback when available")
+		if finishWithLocalPhysicsRoot(result, targetNodeID, nodeStatesMap, startTime) {
+			return result, nil
+		}
+		result.SafetyResult = evaluateSafetyGateEmpty(targetNodeID)
+		result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
+		return result, nil
+	}
 
 	for i := range hypotheses {
 		if hypotheses[i].Target == "" {
@@ -415,12 +467,15 @@ func ExecuteFullPipelineFromStore(
 
 	if len(phase3Results) > 0 && len(phase3Results[0].Causes) > 0 {
 		result.Phase3Result = &phase3Results[0]
-		result.Phase3Graph = discoveredGraph
+		result.Phase3Graph = causalGraph
 		log.Printf("  -> root cause: target=%s score=%.4f conf=%.4f",
 			phase3Results[0].Target, phase3Results[0].Score, phase3Results[0].Confidence)
 	} else {
 		result.ErrorsEncountered = append(result.ErrorsEncountered,
-			"Phase 3: no causal drivers (load may be below threshold)")
+			"Phase 3: no causal drivers; using queue-physics fallback when available")
+		if finishWithLocalPhysicsRoot(result, targetNodeID, nodeStatesMap, startTime) {
+			return result, nil
+		}
 		result.SafetyResult = evaluateSafetyGateEmpty(targetNodeID)
 		result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
 		return result, nil
@@ -430,7 +485,7 @@ func ExecuteFullPipelineFromStore(
 	if len(result.Phase3Result.Causes) > 0 {
 		backdoorEffects := make(map[string]float64)
 		for _, cause := range result.Phase3Result.Causes {
-			br := phase3.ComputeBackdoorEffect(discoveredGraph, temporalGraph,
+			br := phase3.ComputeBackdoorEffect(causalGraph, temporalGraph,
 				cause.Node, targetNodeID)
 			backdoorEffects[cause.Node] = br.Effect
 		}
@@ -438,16 +493,20 @@ func ExecuteFullPipelineFromStore(
 		log.Printf("  -> backdoor effects: %v", backdoorEffects)
 	}
 
-	nodeStatesMap := buildNodeStatesMap(discoveredGraph)
-	physicsRoots := phase3.FindRootCauseByPropagation(discoveredGraph, nodeStatesMap, targetNodeID)
+	physicsRoots := phase3.FindRootCauseByPropagation(causalGraph, nodeStatesMap, targetNodeID)
+	if len(physicsRoots) == 0 {
+		if localRoot, ok := findLocalPhysicsRoot(nodeStatesMap, targetNodeID); ok {
+			physicsRoots = []phase3.RootCauseResult{localRoot}
+		}
+	}
 	result.PhysicsRootCauses = physicsRoots
 	if len(physicsRoots) > 0 {
 		log.Printf("  -> physics root: %s score=%.4f", physicsRoots[0].NodeID, physicsRoots[0].Score)
 	}
 
-	// 
+	//
 	// PHASE 4: EXPLANATION
-	// 
+	//
 	log.Println("[ORCHESTRATOR] Phase 4: explanation generation...")
 
 	phase4Graph := bridge.ConvertPhase3ResultToPhase4Graph(*result.Phase3Result, result.Phase3Graph)
@@ -477,10 +536,10 @@ func ExecuteFullPipelineFromStore(
 		return result, nil
 	}
 
-	// 
+	//
 	// PHASE 5: RL POLICY + SAFETY GATE
 	// Fix 4: warmstart from persisted weights; persist after training.
-	// 
+	//
 	log.Println("[ORCHESTRATOR] Phase 5: RL policy + safety gate...")
 
 	staticValues := make(map[string]float64)
@@ -551,9 +610,9 @@ func ExecuteFullPipelineFromStore(
 	return result, nil
 }
 
-// 
+//
 // SAFETY GATE
-// 
+//
 
 func evaluateSafetyGateFull(
 	graph *phase5.CausalGraph,
@@ -587,9 +646,207 @@ func evaluateSafetyGateEmpty(target string) *SafetyResult {
 	return &SafetyResult{LatentRisk: latent, Confidence: conf, Fallback: fallback, Fusion: emptyFusion}
 }
 
-// 
+func evaluateSafetyGateLocal(root phase3.RootCauseResult) *SafetyResult {
+	score := localRootConfidence(root)
+	state := phase5.ProbableState
+	if score >= 0.75 {
+		state = phase5.ConfirmedState
+	}
+
+	latent := phase5.LatentRiskReport{
+		Level:           phase5.LatentRiskLow,
+		ResidualRatio:   1.0,
+		GraphCoverage:   1.0,
+		SuspiciousNodes: []string{},
+	}
+	conf := phase5.ConfidenceReport{
+		Score: score,
+		State: state,
+		Components: phase5.ConfidenceComponents{
+			GraphCoverage:     1.0,
+			Determinism:       1.0,
+			ResidualExplained: 1.0,
+			RoleConsistency:   1.0,
+			LatentPenalty:     0.0,
+		},
+	}
+	fusion := phase5.FusionResult{RootCauses: []string{root.NodeID}}
+	fallback := phase5.FallbackDecision{
+		IsUnknown:         false,
+		RemediationPolicy: phase5.PolicyHumanReview,
+		ConfidenceScore:   score,
+		LatentLevel:       phase5.LatentRiskLow,
+	}
+	return &SafetyResult{LatentRisk: latent, Confidence: conf, Fallback: fallback, Fusion: fusion}
+}
+
+func finishWithLocalPhysicsRoot(
+	result *PipelineResult,
+	target string,
+	nodeStates map[string]phase3.NodeState,
+	startTime time.Time,
+) bool {
+	root, ok := findLocalPhysicsRoot(nodeStates, target)
+	if !ok {
+		return false
+	}
+
+	confidence := localRootConfidence(root)
+	result.PhysicsRootCauses = []phase3.RootCauseResult{root}
+	result.Phase3Result = &phase3.InferenceResult{
+		Target: target,
+		Causes: []phase3.Cause{{
+			Node:  root.NodeID,
+			Score: root.Score,
+		}},
+		Score:      root.Score,
+		Confidence: confidence,
+	}
+	result.SafetyResult = evaluateSafetyGateLocal(root)
+	result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
+	log.Printf("  -> queue physics root: %s load=%.3f queue=%.2f conf=%.3f",
+		root.NodeID, root.Load, root.QueueLength, confidence)
+	return true
+}
+
+func findLocalPhysicsRoot(
+	nodeStates map[string]phase3.NodeState,
+	target string,
+) (phase3.RootCauseResult, bool) {
+	if len(nodeStates) == 0 {
+		return phase3.RootCauseResult{}, false
+	}
+
+	if target != "" {
+		if state, ok := nodeStates[target]; ok {
+			if root, ok := buildLocalPhysicsRoot(target, target, state); ok {
+				return root, true
+			}
+		}
+	}
+
+	best := phase3.RootCauseResult{}
+	bestScore := -1.0
+	for _, nodeID := range sortedKeys(nodeStates) {
+		root, ok := buildLocalPhysicsRoot(nodeID, target, nodeStates[nodeID])
+		if !ok {
+			continue
+		}
+		if root.Score > bestScore {
+			best = root
+			bestScore = root.Score
+		}
+	}
+	if bestScore < 0 {
+		return phase3.RootCauseResult{}, false
+	}
+	return best, true
+}
+
+func buildLocalPhysicsRoot(
+	nodeID string,
+	target string,
+	state phase3.NodeState,
+) (phase3.RootCauseResult, bool) {
+	state = normalizedNodeState(state)
+	queueLength := math.Max(0, state.QueueLength)
+	load := state.Load
+
+	if load < 0.85 && queueLength < 100 {
+		return phase3.RootCauseResult{}, false
+	}
+
+	overloadScore := math.Max(0, load-1.0) * 3.0
+	pressureScore := math.Max(0, load-0.85)
+	queueScore := math.Min(math.Log1p(queueLength)/10.0, 1.5)
+	score := overloadScore + pressureScore + queueScore
+
+	chain := &phase3.PropagationChain{
+		RootNode:          nodeID,
+		TargetNode:        target,
+		TotalDelay:        state.ProcessingDelay,
+		FinalStrength:     score,
+		IsPhysicallyValid: nodeID == target || target == "",
+	}
+
+	explanation := fmt.Sprintf(
+		"ROOT CAUSE: %s - arrival_rate=%.3f service_rate=%.3f rho=%.2f queue_length=%.2f",
+		nodeID, state.ArrivalRate, state.ServiceRate, load, queueLength,
+	)
+	if load <= 1.0 {
+		explanation = fmt.Sprintf(
+			"ROOT CAUSE: %s - queue backlog remains high (queue_length=%.2f) with current rho=%.2f",
+			nodeID, queueLength, load,
+		)
+	}
+
+	return phase3.RootCauseResult{
+		NodeID:              nodeID,
+		Score:               score,
+		IsOverloaded:        load > 1.0,
+		QueueLength:         queueLength,
+		Load:                load,
+		PropagationChain:    chain,
+		PhysicalExplanation: explanation,
+	}, true
+}
+
+func normalizedNodeState(state phase3.NodeState) phase3.NodeState {
+	if state.ServiceRate <= 0 {
+		state.ServiceRate = 1.0
+	}
+	if state.Load <= 0 && state.ArrivalRate > 0 {
+		state.Load = state.ArrivalRate / state.ServiceRate
+	}
+	if state.ProcessingDelay <= 0 && state.QueueLength > 0 {
+		state.ProcessingDelay = state.QueueLength / state.ServiceRate
+	}
+	return state
+}
+
+func localRootConfidence(root phase3.RootCauseResult) float64 {
+	score := 0.50
+	if root.Load >= 1.0 {
+		score += 0.10
+	}
+	if root.Load >= 1.05 {
+		score += 0.10
+	}
+	score += math.Min(math.Log1p(math.Max(root.QueueLength, 0))/40.0, 0.14)
+	return math.Max(0.45, math.Min(score, 0.74))
+}
+
+func pruneWeakCausalEdges(graph *phase3.Graph, minProbability, minStrength float64) *phase3.Graph {
+	if graph == nil {
+		return nil
+	}
+	pruned := &phase3.Graph{
+		Nodes:   make(map[string]*phase3.Node, len(graph.Nodes)),
+		Edges:   make([]*phase3.Edge, 0, len(graph.Edges)),
+		Factors: graph.Factors,
+	}
+	for id, node := range graph.Nodes {
+		pruned.Nodes[id] = node
+	}
+	for _, edge := range graph.Edges {
+		if edge.ExistenceProb < minProbability {
+			continue
+		}
+		if math.Abs(edge.CausalStrength) < minStrength {
+			continue
+		}
+		if len(edge.SourceSeries) < 4 || len(edge.TargetSeries) < 4 {
+			continue
+		}
+		edgeCopy := *edge
+		pruned.Edges = append(pruned.Edges, &edgeCopy)
+	}
+	return pruned
+}
+
+//
 // D-SEPARATION FILTER
-// 
+//
 
 func applyDSeparationFilter(
 	hypotheses []phase3.CausalHypothesis,
@@ -622,9 +879,25 @@ func applyDSeparationFilter(
 	return filtered
 }
 
-// 
+func filterHypothesesForTarget(
+	hypotheses []phase3.CausalHypothesis,
+	target string,
+) []phase3.CausalHypothesis {
+	if target == "" || len(hypotheses) == 0 {
+		return hypotheses
+	}
+	filtered := make([]phase3.CausalHypothesis, 0, len(hypotheses))
+	for _, h := range hypotheses {
+		if h.Target == target {
+			filtered = append(filtered, h)
+		}
+	}
+	return filtered
+}
+
+//
 // DATA HELPERS
-// 
+//
 
 func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 	nodeIDs := store.GetAllNodeIDs()
@@ -783,9 +1056,9 @@ func resolveTarget(hint string, nodes []string, graph *phase3.Graph) string {
 	return mostDownstreamNode(graph, nodes)
 }
 
-// 
+//
 // SIGNAL / MATRIX HELPERS
-// 
+//
 
 func buildSignalMatrix(dataset *data.Dataset) [][]float64 {
 	if len(dataset.Points) == 0 || len(dataset.Nodes) == 0 {
@@ -886,9 +1159,9 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-// 
+//
 // SUMMARY
-// 
+//
 
 func (pr *PipelineResult) Summary() string {
 	s := "[PIPELINE SUMMARY]\n"
