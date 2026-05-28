@@ -86,6 +86,10 @@ type Config struct {
 	// rate. Must be >= 1 when rate limiting is enabled.
 	// Default: 20
 	RateLimitBurst int
+
+	// GitHubToken is optional. If provided, the /explore endpoint can use it
+	// to enrich incident explanations with recent commits and deployment context.
+	GitHubToken string
 }
 
 // Load reads configuration from environment variables, applying defaults
@@ -115,6 +119,7 @@ func Load() Config {
 		IdleTimeoutSeconds:         getenvInt("ABSIA_IDLE_TIMEOUT_SECONDS", 120),
 		RateLimitRequestsPerSecond: getenvInt("ABSIA_RATE_LIMIT_RPS", 10),
 		RateLimitBurst:             getenvInt("ABSIA_RATE_LIMIT_BURST", 20),
+		GitHubToken:                getenv("GITHUB_TOKEN", ""),
 	}
 }
 

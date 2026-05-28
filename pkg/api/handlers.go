@@ -54,6 +54,42 @@ var globalMaxBodyBytes int64 = 1 << 20
 // globalLog is the base structured logger for all handler logging.
 var globalLog *slog.Logger
 
+// globalGitHubToken is optional; enables GitHub-aware contextual enrichment
+// in the /explore endpoint. Loaded from GITHUB_TOKEN env var.
+var globalGitHubToken string
+
+// globalSemanticsMu guards globalLastSemantics.
+var globalSemanticsMu sync.RWMutex
+
+// globalLastSemantics is the most recent FailureSemantics result, cached for
+// use by the /explore and /semantics endpoints without re-running the pipeline.
+var globalLastSemantics *orchestrator.FailureSemantics
+
+// globalLastConfidenceNarrative is the plain-English confidence explanation.
+var globalLastConfidenceNarrative string
+
+// globalLastIncidentTitle is the current incident title.
+var globalLastIncidentTitle string
+
+// SetGitHubToken injects the optional GitHub PAT for contextual enrichment.
+func SetGitHubToken(token string) {
+	globalGitHubToken = token
+}
+
+func cacheSemantics(sem *orchestrator.FailureSemantics, confNarrative, title string) {
+	globalSemanticsMu.Lock()
+	defer globalSemanticsMu.Unlock()
+	globalLastSemantics = sem
+	globalLastConfidenceNarrative = confNarrative
+	globalLastIncidentTitle = title
+}
+
+func cachedSemantics() (*orchestrator.FailureSemantics, string, string) {
+	globalSemanticsMu.RLock()
+	defer globalSemanticsMu.RUnlock()
+	return globalLastSemantics, globalLastConfidenceNarrative, globalLastIncidentTitle
+}
+
 // ============================================================================
 // PER-IP RATE LIMITER
 // Token-bucket rate limiter keyed by remote IP. Uses stdlib only — no external
@@ -286,6 +322,19 @@ type AnalysisResponse struct {
 
 	// Detailed safety gate metadata (superset of the top-level fields).
 	Safety SafetyGate `json:"safety"`
+
+	// Failure semantics — human-readable operational intelligence.
+	// These fields transform abstract causal metrics into SRE-grade language.
+	OperationalState    string                         `json:"operational_state"`
+	IncidentTitle       string                         `json:"incident_title"`
+	FailureCategory     string                         `json:"failure_category"`
+	ConfidenceNarrative string                         `json:"confidence_narrative"`
+	Severity            float64                        `json:"severity"`
+	BlastRadius         int                            `json:"blast_radius"`
+	Timeline            []string                       `json:"timeline,omitempty"`
+	Narrative           []string                       `json:"narrative,omitempty"`
+	Evidence            []orchestrator.FailureEvidence  `json:"evidence,omitempty"`
+	Remediation         []orchestrator.RemediationAction `json:"remediation,omitempty"`
 }
 
 type ExplainResponse struct {
@@ -676,18 +725,53 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sg := buildSafetyGate(result.SafetyResult)
+
+	// Build node states map for failure semantics.
+	nodeStatesMap := result.GetNodeStatesMap()
+	sem := orchestrator.BuildFailureSemantics(result, nodeID, nodeStatesMap)
+
+	// Generate confidence narrative and incident title.
+	confNarrative := ""
+	if result.SafetyResult != nil {
+		c := result.SafetyResult.Confidence
+		confNarrative = orchestrator.ConfidenceNarrative(
+			c.Score,
+			c.Components.Determinism,
+			c.Components.GraphCoverage,
+			c.Components.ResidualExplained,
+			c.Components.RoleConsistency,
+			sg.LatentRisk,
+			"",
+		)
+	}
+	title := orchestrator.IncidentTitle(sem)
+	narrative := orchestrator.OperationalNarrative(sem)
+
+	// Cache for /explore and /semantics endpoints.
+	cacheSemantics(sem, confNarrative, title)
+
 	resp := AnalysisResponse{
-		Success:           true,
-		DataSource:        result.DataSource,
-		ActionsCount:      len(result.Phase5Actions),
-		PatternsCount:     len(result.Phase2Patterns),
-		Summary:           result.Summary(),
-		ExecutionTimeMS:   result.ExecutionTimeMS,
-		ConfidenceScore:   sg.ConfidenceScore,
-		ConfidenceState:   sg.ConfidenceState,
-		LatentRisk:        sg.LatentRisk,
-		FallbackTriggered: sg.FallbackTriggered,
-		Safety:            sg,
+		Success:             true,
+		DataSource:          result.DataSource,
+		ActionsCount:        len(result.Phase5Actions),
+		PatternsCount:       len(result.Phase2Patterns),
+		Summary:             result.Summary(),
+		ExecutionTimeMS:     result.ExecutionTimeMS,
+		ConfidenceScore:     sg.ConfidenceScore,
+		ConfidenceState:     sg.ConfidenceState,
+		LatentRisk:          sg.LatentRisk,
+		FallbackTriggered:   sg.FallbackTriggered,
+		Safety:              sg,
+		OperationalState:    string(sem.State),
+		IncidentTitle:       title,
+		FailureCategory:     string(sem.Category),
+		ConfidenceNarrative: confNarrative,
+		Severity:            sem.Severity,
+		BlastRadius:         sem.BlastRadius,
+		Timeline:            sem.Timeline,
+		Narrative:           narrative,
+		Evidence:            sem.Evidence,
+		Remediation:         sem.Remediation,
 	}
 
 	resp.RootCause = result.PrimaryRootCause()
@@ -985,6 +1069,10 @@ func SetupRoutes(base *slog.Logger) {
 	http.Handle("/analyze", chainRL(AnalyzeHandler))
 	http.Handle("/explain", chainRL(ExplainHandler))
 	http.Handle("/act", chainRL(ActHandler))
+
+	// Incident intelligence endpoints.
+	http.Handle("/explore", chainRL(ExploreHandler))
+	http.Handle("/semantics", chain(SemanticsHandler))
 
 	// Dashboard UI — served from the embedded ui/index.html.
 	// "/" must be registered last so it acts as the catch-all fallback.

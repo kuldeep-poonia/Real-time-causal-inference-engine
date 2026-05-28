@@ -73,6 +73,7 @@ func main() {
 	api.SetMaxBodyBytes(cfg.MaxBodyBytes)
 	api.SetLogger(structLog)
 	api.SetRateLimit(cfg.RateLimitRequestsPerSecond, cfg.RateLimitBurst)
+	api.SetGitHubToken(cfg.GitHubToken)
 
 	if cfg.RateLimitRequestsPerSecond > 0 {
 		structLog.Info("rate limiting enabled",

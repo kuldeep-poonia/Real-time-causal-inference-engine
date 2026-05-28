@@ -102,6 +102,15 @@ func (pr *PipelineResult) PrimaryRootCause() string {
 	return ""
 }
 
+// GetNodeStatesMap extracts the NodeState for each node from the phase3 graph.
+// This is used by the failure semantics engine to determine node health.
+func (pr *PipelineResult) GetNodeStatesMap() map[string]phase3.NodeState {
+	if pr == nil || pr.Phase3Graph == nil {
+		return nil
+	}
+	return buildNodeStatesMap(pr.Phase3Graph)
+}
+
 //
 // PACKAGE-LEVEL CONFIGURATION
 //
