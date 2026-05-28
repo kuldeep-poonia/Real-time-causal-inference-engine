@@ -20,9 +20,9 @@ import (
 	phase5 "absia/internal/intelligence/phase5_insight"
 )
 
-// ============================================================================
+// 
 // RESULT TYPES
-// ============================================================================
+// 
 
 // SafetyResult holds the three mandatory safety-gate outputs.
 // No API response is returned without these being evaluated.
@@ -80,9 +80,9 @@ type PipelineResult struct {
 	DataSource        string // "real" | "synthetic"
 }
 
-// ============================================================================
+// 
 // PACKAGE-LEVEL CONFIGURATION
-// ============================================================================
+// 
 
 // pipelineSeed is the seed used for all deterministic random operations.
 // Defaults to 42; overrideable via SetSeed before first pipeline call.
@@ -126,12 +126,12 @@ func getPolicyStore() *policy.Store {
 	return pipelinePolicyStore
 }
 
-// ============================================================================
+// 
 // PER-TARGET RANKING STATE
 // Fix: was a single global slice, causing concurrent requests for different
 // targets to corrupt each other's ranking instability signal.
 // Now keyed by target node ID so each target has an independent prior.
-// ============================================================================
+// 
 
 var (
 	prevRankingMu       sync.RWMutex
@@ -166,9 +166,9 @@ func setPrevRanking(target string, causes []string) {
 	prevRankingByTarget[target] = dst
 }
 
-// ============================================================================
+// 
 // PUBLIC ENTRY POINTS
-// ============================================================================
+// 
 
 // ExecuteFullPipelineFromStore is the sole production entry point.
 // It requires a non-nil store with real container metrics.
@@ -177,23 +177,13 @@ func setPrevRanking(target string, causes []string) {
 // Callers must wait for at least 2 containers to accumulate 4 samples each
 // (~32 seconds after startup with the default 8s collection interval).
 func ExecuteFullPipelineFromStore(
-	arrivalRate, serviceRate, queueLength float64,
+	targetNodeIDHint string,
 	store *metricsstore.Store,
 ) (*PipelineResult, error) {
 
 	startTime := time.Now()
 
 	result := &PipelineResult{ErrorsEncountered: make([]string, 0)}
-
-	if serviceRate <= 0 {
-		return nil, fmt.Errorf("serviceRate must be > 0, got %f", serviceRate)
-	}
-	if arrivalRate < 0 {
-		return nil, fmt.Errorf("arrivalRate must be >= 0, got %f", arrivalRate)
-	}
-	if queueLength < 0 {
-		return nil, fmt.Errorf("queueLength must be >= 0, got %f", queueLength)
-	}
 
 	// ── Real data requirement ──────────────────────────────────────────────
 	// No synthetic fallback. If the store has no data yet, return a clear
@@ -215,10 +205,10 @@ func ExecuteFullPipelineFromStore(
 	seed := getSeed()
 	ps   := getPolicyStore()
 
-	// ========================================================================
-	// ========================================================================
+	// 
+	// 
 	// PHASE 1: SIGNAL PHYSICS
-	// ========================================================================
+	// 
 	log.Println("[ORCHESTRATOR] Phase 1: signal physics...")
 
 	// Store is guaranteed non-nil here (checked at entry point).
@@ -232,12 +222,10 @@ func ExecuteFullPipelineFromStore(
 		}
 	}
 	if p1SR <= 0 {
-		p1AR = arrivalRate
-		p1SR = serviceRate
-		p1QL = queueLength
-	}
-	if p1SR <= 0 {
+		// No sample available — use neutral defaults for Phase 1 physics.
+		p1AR = 0.5
 		p1SR = 1.0
+		p1QL = 0.0
 	}
 	p1Load := p1AR / p1SR
 	result.Phase1NodeState = &phase1NodeState{
@@ -247,7 +235,7 @@ func ExecuteFullPipelineFromStore(
 	log.Printf("  -> rho=%.3f lambda=%.2f mu=%.2f", p1Load, p1AR, p1SR)
 
 	// PHASE 2: FULL PATTERN DETECTION
-	// ========================================================================
+	// 
 	log.Println("[ORCHESTRATOR] Phase 2: full pattern detection...")
 
 	signalMatrix := buildSignalMatrix(realisticData)
@@ -293,9 +281,9 @@ func ExecuteFullPipelineFromStore(
 	}
 	log.Printf("  -> dynamics=%s patterns=%d", dynamics.Type, len(result.Phase2Patterns))
 
-	// ========================================================================
+	// 
 	// PHASE 3: CAUSAL GRAPH DISCOVERY + FULL CAUSAL ENGINE
-	// ========================================================================
+	// 
 	log.Println("[ORCHESTRATOR] Phase 3: causal graph + full causal engine...")
 
 	temporalGraph := buildTemporalGraph(realisticData)
@@ -318,7 +306,7 @@ func ExecuteFullPipelineFromStore(
 			if sample, ok := store.GetLatestSample(nodeID); ok {
 				sr := sample.ServiceRate
 				if sr <= 0 {
-					sr = serviceRate
+					sr = 1.0
 				}
 				ns = phase3.NodeState{
 					ArrivalRate: sample.ArrivalRate, ServiceRate: sr,
@@ -328,8 +316,8 @@ func ExecuteFullPipelineFromStore(
 			}
 			if ns.ServiceRate <= 0 {
 				ns = phase3.NodeState{
-					ArrivalRate: arrivalRate, ServiceRate: serviceRate,
-					Load: arrivalRate / serviceRate, QueueLength: queueLength,
+					ArrivalRate: 0.5, ServiceRate: 1.0,
+					Load: 0.5, QueueLength: 0,
 					Timestamp: node.State.Timestamp,
 				}
 			}
@@ -410,7 +398,9 @@ func ExecuteFullPipelineFromStore(
 		}
 	}
 
-	targetNodeID := mostDownstreamNode(discoveredGraph, realisticData.Nodes)
+	// Use the caller-requested node if it exists in the dataset.
+	// Fall back to mostDownstreamNode only when the hint is empty or absent.
+	targetNodeID := resolveTarget(targetNodeIDHint, realisticData.Nodes, discoveredGraph)
 	hypotheses = applyDSeparationFilter(hypotheses, discoveredGraph)
 	log.Printf("  -> D-sep filter: %d hypotheses survive", len(hypotheses))
 
@@ -455,9 +445,9 @@ func ExecuteFullPipelineFromStore(
 		log.Printf("  -> physics root: %s score=%.4f", physicsRoots[0].NodeID, physicsRoots[0].Score)
 	}
 
-	// ========================================================================
+	// 
 	// PHASE 4: EXPLANATION
-	// ========================================================================
+	// 
 	log.Println("[ORCHESTRATOR] Phase 4: explanation generation...")
 
 	phase4Graph := bridge.ConvertPhase3ResultToPhase4Graph(*result.Phase3Result, result.Phase3Graph)
@@ -487,10 +477,10 @@ func ExecuteFullPipelineFromStore(
 		return result, nil
 	}
 
-	// ========================================================================
+	// 
 	// PHASE 5: RL POLICY + SAFETY GATE
 	// Fix 4: warmstart from persisted weights; persist after training.
-	// ========================================================================
+	// 
 	log.Println("[ORCHESTRATOR] Phase 5: RL policy + safety gate...")
 
 	staticValues := make(map[string]float64)
@@ -561,9 +551,9 @@ func ExecuteFullPipelineFromStore(
 	return result, nil
 }
 
-// ============================================================================
+// 
 // SAFETY GATE
-// ============================================================================
+// 
 
 func evaluateSafetyGateFull(
 	graph *phase5.CausalGraph,
@@ -597,9 +587,9 @@ func evaluateSafetyGateEmpty(target string) *SafetyResult {
 	return &SafetyResult{LatentRisk: latent, Confidence: conf, Fallback: fallback, Fusion: emptyFusion}
 }
 
-// ============================================================================
+// 
 // D-SEPARATION FILTER
-// ============================================================================
+// 
 
 func applyDSeparationFilter(
 	hypotheses []phase3.CausalHypothesis,
@@ -632,9 +622,9 @@ func applyDSeparationFilter(
 	return filtered
 }
 
-// ============================================================================
+// 
 // DATA HELPERS
-// ============================================================================
+// 
 
 func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 	nodeIDs := store.GetAllNodeIDs()
@@ -642,23 +632,28 @@ func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 		return nil
 	}
 
-	// Only include nodes that have enough samples to contribute meaningfully.
-	// Nodes with fewer than 4 samples are excluded rather than truncating
-	// the entire dataset to their shorter length.
+	// Qualify nodes: enough samples AND meaningful signal variation.
+	// Docker-discovered idle containers (CPU≈0, serviceRate=1.0) produce flat
+	// near-zero arrival series that corrupt the causal graph — exclude them.
+	// A node is "meaningful" if its arrival rate series has standard deviation
+	// above a minimum threshold (0.001 = 0.1% load variation).
 	qualified := make([]string, 0, len(nodeIDs))
 	maxLen := 0
 	for _, id := range nodeIDs {
 		s := store.GetArrivalRateSeries(id)
-		if len(s) >= 4 {
-			qualified = append(qualified, id)
-			if len(s) > maxLen {
-				maxLen = len(s)
-			}
+		if len(s) < 4 {
+			continue
+		}
+		if !hasMeaningfulVariation(s, 0.001) {
+			continue
+		}
+		qualified = append(qualified, id)
+		if len(s) > maxLen {
+			maxLen = len(s)
 		}
 	}
 
-	// Need at least 2 nodes with real data for causal graph to be meaningful.
-	// A single node produces a trivial graph with no causal structure.
+	// Need at least 2 nodes with real varied signal for causal graph.
 	if len(qualified) < 2 || maxLen < 4 {
 		return nil
 	}
@@ -675,13 +670,37 @@ func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 			if t < len(series) {
 				ds.Points[t].Values[id] = series[t]
 			} else {
-				// Forward-fill: use the last known value for nodes with fewer samples.
-				// This is more accurate than marking as missing and avoids shrinking the dataset.
 				ds.Points[t].Values[id] = series[len(series)-1]
 			}
 		}
 	}
 	return ds
+}
+
+// hasMeaningfulVariation returns true when the series has enough signal
+// variation to contribute to a causal graph. Flat or near-zero series
+// (e.g. idle Docker containers at 0% CPU) are excluded.
+func hasMeaningfulVariation(series []float64, minStdDev float64) bool {
+	if len(series) == 0 {
+		return false
+	}
+	mean := 0.0
+	for _, v := range series {
+		mean += v
+	}
+	mean /= float64(len(series))
+	if mean < 0.01 {
+		// Mean arrival rate below 1% — definitely an idle container
+		return false
+	}
+	variance := 0.0
+	for _, v := range series {
+		d := v - mean
+		variance += d * d
+	}
+	variance /= float64(len(series))
+	stddev := math.Sqrt(variance)
+	return stddev >= minStdDev
 }
 
 func assignTopologicalTimestamps(graph *phase3.Graph, nodeIDs []string) map[string]float64 {
@@ -742,9 +761,31 @@ func targetNodeOrDefault(nodes []string) string {
 	return "target"
 }
 
-// ============================================================================
+// resolveTarget returns the node the caller requested if it exists in the
+// dataset. Falls back to mostDownstreamNode when the hint is absent.
+func resolveTarget(hint string, nodes []string, graph *phase3.Graph) string {
+	if hint != "" {
+		for _, n := range nodes {
+			if n == hint {
+				return hint
+			}
+		}
+		// Hint provided but node not in dataset — it has no /ingest data yet.
+		// Pick closest name match (prefix), then fall back.
+		for _, n := range nodes {
+			if len(hint) >= 3 && len(n) >= 3 {
+				if n[:3] == hint[:3] {
+					return n
+				}
+			}
+		}
+	}
+	return mostDownstreamNode(graph, nodes)
+}
+
+// 
 // SIGNAL / MATRIX HELPERS
-// ============================================================================
+// 
 
 func buildSignalMatrix(dataset *data.Dataset) [][]float64 {
 	if len(dataset.Points) == 0 || len(dataset.Nodes) == 0 {
@@ -845,9 +886,9 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-// ============================================================================
+// 
 // SUMMARY
-// ============================================================================
+// 
 
 func (pr *PipelineResult) Summary() string {
 	s := "[PIPELINE SUMMARY]\n"

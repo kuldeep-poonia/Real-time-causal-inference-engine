@@ -118,7 +118,7 @@ func TestFullPipelineE2E(t *testing.T) {
 
 	store := metricsstore.New(4)
 	for _, rc := range runCases {
-		res, err := orchestrator.ExecuteFullPipelineFromStore(rc.lambda, rc.mu, rc.q, store)
+		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
 		if err != nil {
 			t.Errorf("pipeline error [%s] (expected success): %v", rc.name, err)
 			report.PipelineCases = append(report.PipelineCases, PipelineCase{
@@ -249,7 +249,7 @@ func TestFullPipelineE2E(t *testing.T) {
 
 	inputGuardsPass := true
 	for _, gc := range guardCases {
-		_, err := orchestrator.ExecuteFullPipelineFromStore(gc.lambda, gc.mu, gc.q, store)
+		_, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
 		didErr := err != nil
 		correct := didErr == gc.expectErr
 		if !correct {
@@ -279,7 +279,7 @@ func TestFullPipelineE2E(t *testing.T) {
 	}
 
 	for _, sc := range safetyContractCases {
-		res, err := orchestrator.ExecuteFullPipelineFromStore(sc.lambda, sc.mu, sc.q, store)
+		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
 		if err != nil || res == nil {
 			report.SafetyContract = append(report.SafetyContract, SafetyContractCase{
 				CaseName: sc.name, SafetyNonNil: false,

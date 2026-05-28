@@ -426,16 +426,12 @@ func requireAuth(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// runPipeline executes the causal pipeline against the real metrics store.
-// Returns (nil, false) and writes an error response if the store has no data yet.
-// There is no synthetic fallback — the pipeline only runs on real container metrics.
+// runPipeline executes the causal pipeline for the requested node.
+// node_id is passed as the target hint so the pipeline analyses the right service.
+// Metric values are pulled from the store — the request body only needs node_id.
 func runPipeline(w http.ResponseWriter, req MetricsRequest) (*orchestrator.PipelineResult, bool) {
-	result, err := orchestrator.ExecuteFullPipelineFromStore(
-		*req.ArrivalRate,
-		*req.ServiceRate,
-		*req.QueueLength,
-		globalStore,
-	)
+	nodeID := req.nodeID()
+	result, err := orchestrator.ExecuteFullPipelineFromStore(nodeID, globalStore)
 	if err != nil {
 		status := http.StatusUnprocessableEntity
 		if globalStore == nil || !globalStore.HasRealData() {
@@ -671,70 +667,8 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Populate missing fields from stored data or defaults
 	nodeID := req.nodeID()
-	if req.ArrivalRate == nil || req.ServiceRate == nil || req.QueueLength == nil {
-		if globalStore != nil {
-			if _, ok := globalStore.GetLatestSample(nodeID); ok {
-				// अगर request empty है → force real pipeline
-				if req.ArrivalRate == nil && req.ServiceRate == nil && req.QueueLength == nil {
-					// store se latest sample uthao
-					nodeID := req.nodeID()
-
-					latest, ok := globalStore.GetLatestSample(nodeID)
-					if !ok {
-						writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-							Success: false,
-							Errors:  []string{"no real data available in store"},
-						})
-						return
-					}
-
-					result, err := orchestrator.ExecuteFullPipelineFromStore(
-						latest.ArrivalRate,
-						latest.ServiceRate,
-						latest.QueueLength,
-						globalStore,
-					)
-					if err != nil {
-						writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
-							Success: false, Errors: []string{err.Error()},
-						})
-						return
-					}
-
-					sg := buildSafetyGate(result.SafetyResult)
-					writeJSON(w, http.StatusOK, AnalysisResponse{
-						Success:           true,
-						DataSource:        result.DataSource,
-						Summary:           result.Summary(),
-						ExecutionTimeMS:   result.ExecutionTimeMS,
-						ConfidenceScore:   sg.ConfidenceScore,
-						ConfidenceState:   sg.ConfidenceState,
-						LatentRisk:        sg.LatentRisk,
-						FallbackTriggered: sg.FallbackTriggered,
-						Safety:            sg,
-					})
-					return
-				}
-			}
-		}
-		// Fallback to request metric values if the store has no sample for this node yet.
-		if req.ArrivalRate == nil {
-			writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{
-				Success: false,
-				Errors:  []string{"no metrics available for this container yet — collecting every 8 seconds, real analysis starts after ~32 seconds"},
-			})
-			return
-		}
-	}
-
-	log.Info("analyze",
-		slog.String("node_id", nodeID),
-		slog.Float64("arrival_rate", *req.ArrivalRate),
-		slog.Float64("service_rate", *req.ServiceRate),
-		slog.Float64("queue_length", *req.QueueLength),
-	)
+	log.Info("analyze", slog.String("node_id", nodeID))
 
 	result, ok := runPipeline(w, req)
 	if !ok {
@@ -787,10 +721,7 @@ func ExplainHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	log.Info("explain",
-		slog.Float64("arrival_rate", *req.ArrivalRate),
-		slog.Float64("service_rate", *req.ServiceRate),
-	)
+	log.Info("explain", slog.String("node_id", req.nodeID()))
 
 	result, ok := runPipeline(w, req)
 	if !ok {
@@ -847,10 +778,7 @@ func ActHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	log.Info("act",
-		slog.Float64("arrival_rate", *req.ArrivalRate),
-		slog.Float64("service_rate", *req.ServiceRate),
-	)
+	log.Info("act", slog.String("node_id", req.nodeID()))
 
 	result, ok := runPipeline(w, req)
 	if !ok {
