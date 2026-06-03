@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bufio"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all runtime-configurable parameters for ABSIA.
@@ -95,6 +97,7 @@ type Config struct {
 // Load reads configuration from environment variables, applying defaults
 // for any variable that is absent or unparseable.
 func Load() Config {
+	loadEnv()
 	query := getenv("PROMETHEUS_QUERY", `rate(container_cpu_usage_seconds_total[1m])`)
 
 	seed := getenvInt64("ABSIA_SEED", 42)
@@ -177,4 +180,32 @@ func getenvFloat(key string, defaultVal float64) float64 {
 		return defaultVal
 	}
 	return f
+}
+
+func loadEnv() {
+	file, err := os.Open(".env")
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
+			val = val[1 : len(val)-1]
+		}
+		if os.Getenv(key) == "" {
+			os.Setenv(key, val)
+		}
+	}
 }
