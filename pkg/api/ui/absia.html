@@ -200,10 +200,17 @@ Error generating stack: `+e.message+`
     }
   }
 
+  let lastState = "UNKNOWN";
+
   function updateDashboard(data) {
     const badge = document.getElementById('absia-status-badge');
     const btnDot = document.getElementById('absia-btn-dot');
     const state = data.operational_state || "UNKNOWN";
+    
+    if (state !== "HEALTHY" && state !== "UNKNOWN" && state !== lastState && !absiaExplorerOpen) {
+      toggleAbsiaExplorer();
+    }
+    lastState = state;
     
     // 1. Update status badge & floating button dot
     let badgeColor = "#00c9a0"; // Green
