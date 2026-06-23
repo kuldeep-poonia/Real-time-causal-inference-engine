@@ -233,6 +233,13 @@ func TestNodesHandler_ReturnsStoreInventory(t *testing.T) {
 //
 
 func TestAnalyzeHandler_StableSystem(t *testing.T) {
+	s := metricsstore.New(10)
+	for i := 0; i < 5; i++ {
+		s.Put("primary", metricsstore.NodeSample{ArrivalRate: 3.0, ServiceRate: 10.0, QueueLength: 0.5, Timestamp: float64(i * 8)})
+	}
+	SetStore(s)
+	t.Cleanup(func() { SetStore(nil) })
+
 	body := `{"arrival_rate":3.0,"service_rate":10.0,"queue_length":0.5}`
 	req := httptest.NewRequest(http.MethodPost, "/analyze", bytes.NewBufferString(body))
 	rr := httptest.NewRecorder()
@@ -251,6 +258,13 @@ func TestAnalyzeHandler_StableSystem(t *testing.T) {
 }
 
 func TestAnalyzeHandler_OverloadedSystem(t *testing.T) {
+	s := metricsstore.New(10)
+	for i := 0; i < 5; i++ {
+		s.Put("primary", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 8.0, QueueLength: 5.0, Timestamp: float64(i * 8)})
+	}
+	SetStore(s)
+	t.Cleanup(func() { SetStore(nil) })
+
 	body := `{"arrival_rate":10.0,"service_rate":8.0,"queue_length":5.0}`
 	req := httptest.NewRequest(http.MethodPost, "/analyze", bytes.NewBufferString(body))
 	rr := httptest.NewRecorder()
