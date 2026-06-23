@@ -14,6 +14,7 @@ import (
 	"absia/pkg/metricsstore"
 	"absia/pkg/policy"
 
+	phase1 "absia/internal/intelligence/phase1_signal"
 	phase2 "absia/internal/intelligence/phase2_pattern"
 	phase3 "absia/internal/intelligence/phase3_causal"
 	phase4 "absia/internal/intelligence/phase4_explanation"
@@ -72,7 +73,7 @@ type PipelineResult struct {
 	Phase5Actions     []phase5.Action
 	Phase5Policy      *phase5.Policy
 
-	// Safety gate — mandatory, always evaluated
+	// Safety gate is mandatory and always evaluated.
 	SafetyResult *SafetyResult
 
 	ExecutionTimeMS   float64 // populated for every run
@@ -174,7 +175,7 @@ func init() {
 }
 
 // GetPrevRanking returns a copy of the last stored cause ranking for target.
-// Returns nil on the first call for a given target — correct first-call
+// Returns nil on the first call for a given target, which preserves first-call
 // behaviour for lgRankInstability which returns 0.0 when prev is nil.
 func GetPrevRanking(target string) []string {
 	prevRankingMu.RLock()
@@ -216,11 +217,14 @@ func ExecuteFullPipelineFromStore(
 
 	result := &PipelineResult{ErrorsEncountered: make([]string, 0)}
 
-	// ── Real data requirement ──────────────────────────────────────────────
+	// Real data requirement.
 	// No synthetic fallback. If the store has no data yet, return a clear
 	// error so the API can surface a meaningful "still collecting" message.
 	if store == nil || !store.HasRealData() {
 		return nil, fmt.Errorf("no real data available yet: metrics are collected every 8 seconds, real analysis starts after ~32 seconds")
+	}
+	if err := validateStoreData(store); err != nil {
+		return nil, err
 	}
 
 	realisticData := convertStoreToDataset(store)
@@ -237,39 +241,75 @@ func ExecuteFullPipelineFromStore(
 	ps := getPolicyStore()
 
 	//
-	//
-	// PHASE 1: SIGNAL PHYSICS
+	// PHASE 1: SIGNAL PHYSICS (WIRED DYNAMIC AGENT)
 	//
 	log.Println("[ORCHESTRATOR] Phase 1: signal physics...")
 
-	// Store is guaranteed non-nil here (checked at entry point).
-	var p1AR, p1SR, p1QL float64
-	if len(realisticData.Nodes) > 0 {
-		primaryNode := targetNodeOrDefault(realisticData.Nodes)
-		if sample, ok := store.GetLatestSample(primaryNode); ok {
-			p1AR = sample.ArrivalRate
-			p1SR = sample.ServiceRate
-			p1QL = sample.QueueLength
+	schema := phase1.NewSignalSchema([]string{"ArrivalRate", "ServiceRate", "QueueLength"})
+	p1Manager := phase1.NewManager(schema, 8.0, len(realisticData.Points), 0.2)
+
+	for _, nodeID := range realisticData.Nodes {
+		proc := p1Manager.GetProcessor(nodeID)
+		samples := store.GetSamples(nodeID)
+		for _, s := range samples {
+			_ = proc.Ingest(phase1.SignalInput{
+				SignalID: nodeID,
+				Time:     s.Timestamp,
+				Values: map[string]float64{
+					"ArrivalRate": s.ArrivalRate,
+					"ServiceRate": s.ServiceRate,
+					"QueueLength": s.QueueLength,
+				},
+			})
 		}
 	}
-	if p1SR <= 0 {
-		// No sample available — use neutral defaults for Phase 1 physics.
-		p1AR = 0.5
-		p1SR = 1.0
-		p1QL = 0.0
-	}
-	p1Load := p1AR / p1SR
+	
+	// Wait a tiny bit for the async channels in Phase 1 to drain
+	time.Sleep(50 * time.Millisecond)
+
+	primaryNode := targetNodeFromHintOrDefault(targetNodeIDHint, realisticData.Nodes)
+	p1Proc := p1Manager.GetProcessor(primaryNode)
+	p1State := p1Proc.GetNodeState()
+
+	p1Load := p1State.Load
 	result.Phase1NodeState = &phase1NodeState{
-		Load: p1Load, ArrivalRate: p1AR, ServiceRate: p1SR,
-		QueueLength: p1QL, ProcessingDelay: p1QL / p1SR, Timestamp: 0,
+		Load:            p1Load,
+		ArrivalRate:     p1State.ArrivalRate,
+		ServiceRate:     p1State.ServiceRate,
+		QueueLength:     p1State.QueueLength,
+		ProcessingDelay: p1State.ProcessingDelay,
+		Timestamp:       p1State.Timestamp,
 	}
-	log.Printf("  -> rho=%.3f lambda=%.2f mu=%.2f", p1Load, p1AR, p1SR)
+	log.Printf("  -> rho=%.3f lambda=%.2f mu=%.2f", p1Load, p1State.ArrivalRate, p1State.ServiceRate)
 
 	// PHASE 2: FULL PATTERN DETECTION
 	//
 	log.Println("[ORCHESTRATOR] Phase 2: full pattern detection...")
 
-	signalMatrix := buildSignalMatrix(realisticData)
+	// Use the newly wired Phase 1 smoothed matrix instead of raw data
+	signalMatrix := make([][]float64, len(realisticData.Points))
+	for t := 0; t < len(realisticData.Points); t++ {
+		signalMatrix[t] = make([]float64, len(realisticData.Nodes))
+	}
+	
+	for j, nodeID := range realisticData.Nodes {
+		proc := p1Manager.GetProcessor(nodeID)
+		mat := proc.GetMatrix()
+		if len(mat.Values) == 0 {
+			continue
+		}
+		arIdx := mat.FeatureIdx["ArrivalRate"]
+		
+		offset := len(realisticData.Points) - len(mat.Values)
+		if offset < 0 {
+			offset = 0
+		}
+		for t := 0; t < len(mat.Values); t++ {
+			if t+offset < len(signalMatrix) {
+				signalMatrix[t+offset][j] = mat.Values[t][arIdx]
+			}
+		}
+	}
 
 	dynamics := phase2.ComputeDynamicsIndicator(signalMatrix)
 	result.Phase2Dynamics = &dynamics
@@ -665,14 +705,14 @@ func evaluateSafetyGateLocal(root phase3.RootCauseResult) *SafetyResult {
 	latent := phase5.LatentRiskReport{
 		Level:           phase5.LatentRiskLow,
 		ResidualRatio:   1.0,
-		GraphCoverage:   1.0,
+		PosteriorVariance: 0.0,
 		SuspiciousNodes: []string{},
 	}
 	conf := phase5.ConfidenceReport{
 		Score: score,
 		State: state,
 		Components: phase5.ConfidenceComponents{
-			GraphCoverage:     1.0,
+			PosteriorPrecision: 1.0,
 			Determinism:       1.0,
 			ResidualExplained: 1.0,
 			RoleConsistency:   1.0,
@@ -914,19 +954,12 @@ func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 		return nil
 	}
 
-	// Qualify nodes: enough samples AND meaningful signal variation.
-	// Docker-discovered idle containers (CPU≈0, serviceRate=1.0) produce flat
-	// near-zero arrival series that corrupt the causal graph — exclude them.
-	// A node is "meaningful" if its arrival rate series has standard deviation
-	// above a minimum threshold (0.001 = 0.1% load variation).
+	// Qualify nodes with enough real samples for analysis.
 	qualified := make([]string, 0, len(nodeIDs))
 	maxLen := 0
 	for _, id := range nodeIDs {
 		s := store.GetArrivalRateSeries(id)
 		if len(s) < 4 {
-			continue
-		}
-		if !hasMeaningfulVariation(s, 0.001) {
 			continue
 		}
 		qualified = append(qualified, id)
@@ -935,8 +968,8 @@ func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 		}
 	}
 
-	// Need at least 2 nodes with real varied signal for causal graph.
-	if len(qualified) < 2 || maxLen < 4 {
+	// Need at least one service with enough real samples.
+	if len(qualified) == 0 || maxLen < 4 {
 		return nil
 	}
 
@@ -959,75 +992,6 @@ func convertStoreToDataset(store *metricsstore.Store) *data.Dataset {
 	return ds
 }
 
-// hasMeaningfulVariation returns true when the series has enough signal
-// variation to contribute to a causal graph. Flat or near-zero series
-// (e.g. idle Docker containers at 0% CPU) are excluded.
-func hasMeaningfulVariation(series []float64, minStdDev float64) bool {
-	if len(series) == 0 {
-		return false
-	}
-	mean := 0.0
-	for _, v := range series {
-		mean += v
-	}
-	mean /= float64(len(series))
-	if mean < 0.01 {
-		// Mean arrival rate below 1% — definitely an idle container
-		return false
-	}
-	variance := 0.0
-	for _, v := range series {
-		d := v - mean
-		variance += d * d
-	}
-	variance /= float64(len(series))
-	stddev := math.Sqrt(variance)
-	return stddev >= minStdDev
-}
-
-func assignTopologicalTimestamps(graph *phase3.Graph, nodeIDs []string) map[string]float64 {
-	inDeg := make(map[string]int)
-	for _, id := range nodeIDs {
-		inDeg[id] = 0
-	}
-	for _, e := range graph.Edges {
-		inDeg[e.To]++
-	}
-	queue := make([]string, 0)
-	for _, id := range nodeIDs {
-		if inDeg[id] == 0 {
-			queue = append(queue, id)
-		}
-	}
-	sort.Strings(queue)
-	timestamps := make(map[string]float64, len(nodeIDs))
-	tick := 0.0
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		timestamps[cur] = tick
-		tick++
-		var nexts []string
-		for _, e := range graph.Edges {
-			if e.From == cur {
-				inDeg[e.To]--
-				if inDeg[e.To] == 0 {
-					nexts = append(nexts, e.To)
-				}
-			}
-		}
-		sort.Strings(nexts)
-		queue = append(queue, nexts...)
-	}
-	for _, id := range nodeIDs {
-		if _, ok := timestamps[id]; !ok {
-			timestamps[id] = tick
-			tick++
-		}
-	}
-	return timestamps
-}
-
 func buildNodeStatesMap(graph *phase3.Graph) map[string]phase3.NodeState {
 	states := make(map[string]phase3.NodeState, len(graph.Nodes))
 	for id, node := range graph.Nodes {
@@ -1036,7 +1000,35 @@ func buildNodeStatesMap(graph *phase3.Graph) map[string]phase3.NodeState {
 	return states
 }
 
-func targetNodeOrDefault(nodes []string) string {
+func validateStoreData(store *metricsstore.Store) error {
+	for _, id := range store.GetAllNodeIDs() {
+		for i, sample := range store.GetSamples(id) {
+			if !validFinite(sample.ArrivalRate) || sample.ArrivalRate < 0 {
+				return fmt.Errorf("invalid sample for %s at index %d: arrival_rate must be >= 0", id, i)
+			}
+			if !validFinite(sample.ServiceRate) || sample.ServiceRate <= 0 {
+				return fmt.Errorf("invalid sample for %s at index %d: service_rate must be > 0", id, i)
+			}
+			if !validFinite(sample.QueueLength) || sample.QueueLength < 0 {
+				return fmt.Errorf("invalid sample for %s at index %d: queue_length must be >= 0", id, i)
+			}
+		}
+	}
+	return nil
+}
+
+func validFinite(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
+func targetNodeFromHintOrDefault(hint string, nodes []string) string {
+	if hint != "" {
+		for _, node := range nodes {
+			if node == hint {
+				return node
+			}
+		}
+	}
 	if len(nodes) > 0 {
 		return nodes[len(nodes)-1]
 	}
@@ -1052,7 +1044,7 @@ func resolveTarget(hint string, nodes []string, graph *phase3.Graph) string {
 				return hint
 			}
 		}
-		// Hint provided but node not in dataset — it has no /ingest data yet.
+		// Hint provided but node not in dataset; it has no /ingest data yet.
 		// Pick closest name match (prefix), then fall back.
 		for _, n := range nodes {
 			if len(hint) >= 3 && len(n) >= 3 {
