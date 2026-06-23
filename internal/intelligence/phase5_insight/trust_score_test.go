@@ -139,15 +139,13 @@ func TestHiddenConfounderSuspicion(t *testing.T) {
 		t.Errorf("expected ResidualRatio ≈ 1.0 (all effect mass on path), got %.4f", latent.ResidualRatio)
 	}
 
-	// lgGraphCoverage marks nodes on directed paths FROM causes TO target.
-	// Causes are [A, B]; target is C. Paths: A→C, B→C.
-	// Marked: A (cause start), B (cause start), C (target). Z is upstream of
-	// A and B (parent) — it lies on no forward path from A or B to C.
-	// Coverage = 3/4 = 0.75 ≥ latentCoverageThreshold (0.50) → no collapse signal.
-	expectedCoverage := 3.0 / 4.0
-	if latent.GraphCoverage < expectedCoverage-0.01 {
-		t.Errorf("expected GraphCoverage ≈ %.2f (A,B,C on path; Z is upstream ancestor), got %.4f",
-			expectedCoverage, latent.GraphCoverage)
+	// Variance ratio max is 0.05 / 0.45^2 ≈ 0.2469.
+	expectedVariance := 0.2469
+	if latent.PosteriorVariance > expectedVariance+0.01 || latent.PosteriorVariance < expectedVariance-0.01 {
+		t.Errorf("expected PosteriorVariance ≈ %.4f, got %.4f", expectedVariance, latent.PosteriorVariance)
+	}
+	if latent.PosteriorVariance >= latentVarianceSNRThreshold {
+		t.Errorf("expected PosteriorVariance < threshold %.4f, got %.4f", latentVarianceSNRThreshold, latent.PosteriorVariance)
 	}
 
 	// No active signals should fire.
@@ -443,7 +441,7 @@ func TestConfidenceDowngradeOnLatentHigh(t *testing.T) {
 		CorrelationScore: 0.85, // above threshold
 		ResidualRatio:    0.95, // high — looks clean
 		RankInstability:  0.00, // stable
-		GraphCoverage:    1.00, // full coverage
+		PosteriorVariance:    1.00, // full coverage
 		SuspiciousNodes:  []string{"ghost_node"},
 	}
 
@@ -505,11 +503,11 @@ func TestUnknownFallbackTrigger(t *testing.T) {
 	// HIGH latent report → Gate 1 fires.
 	latent := LatentRiskReport{
 		Level:            LatentRiskHigh,
-		Signals:          SignalRankingInstability | SignalCoverageCollapse,
+		Signals:          SignalRankingInstability | SignalHighPosteriorVariance,
 		CorrelationScore: 0.0,
 		ResidualRatio:    0.80,
 		RankInstability:  0.85,
-		GraphCoverage:    0.20, // below fallbackSevereThreshold (0.30) → Gate 4 fires
+		PosteriorVariance:    0.50, // above fallbackSevereVarianceThreshold (0.40) → Gate 4 fires
 		SuspiciousNodes:  []string{},
 	}
 
@@ -545,7 +543,7 @@ func TestUnknownFallbackTrigger(t *testing.T) {
 		FallbackReasonLatentHighRisk,      // Gate 1: latent HIGH
 		FallbackReasonLowConfidence,       // Gate 2: score=0.20 < 0.45
 		FallbackReasonGraphMismatch,       // Gate 3: "ghost" not in graph
-		FallbackReasonSevereCoverage,      // Gate 4: coverage=0.20 < 0.30
+		FallbackReasonSevereVariance,      // Gate 4: variance=0.50 > 0.40
 		FallbackReasonRankingInstability,  // Gate 5: SignalRankingInstability set
 	}
 
@@ -657,7 +655,7 @@ func TestDeterministicRepeatedScores(t *testing.T) {
 			corrScore:   latent.CorrelationScore,
 			residual:    latent.ResidualRatio,
 			instability: latent.RankInstability,
-			coverage:    latent.GraphCoverage,
+			coverage:    latent.PosteriorVariance,
 			riskLevel:   latent.Level,
 			confScore:   conf.Score,
 			confState:   conf.State,
@@ -709,7 +707,7 @@ func TestNoFalseDowngradeOnValidDAG(t *testing.T) {
 	// Both have paths to C: A→B→C, B→C.
 	exp := tExp(
 		[]string{"A", "B"},
-		map[string]float64{"A": 0.70, "B": 0.30},
+		map[string]float64{"A": 0.60, "B": 0.50},
 	)
 
 	// Stable ranking: same as prior.
@@ -729,8 +727,8 @@ func TestNoFalseDowngradeOnValidDAG(t *testing.T) {
 		confirmedThreshold, conf.Score,
 		latent.Level, conf.State)
 
-	t.Logf("[NoFalseDowngradeOnValidDAG] signals=%d coverage=%.4f residual=%.4f instability=%.4f",
-		latent.Signals, latent.GraphCoverage, latent.ResidualRatio, latent.RankInstability)
+	t.Logf("[NoFalseDowngradeOnValidDAG] signals=%d variance=%.4f residual=%.4f instability=%.4f",
+		latent.Signals, latent.PosteriorVariance, latent.ResidualRatio, latent.RankInstability)
 
 	// No signals should fire on a clean, stable, fully-covered DAG.
 	if latent.Signals != SignalNone {
@@ -752,8 +750,8 @@ func TestNoFalseDowngradeOnValidDAG(t *testing.T) {
 	if latent.RankInstability > latentInstabilityThreshold {
 		t.Errorf("RankInstability=%.4f should be ≤ threshold=%.4f", latent.RankInstability, latentInstabilityThreshold)
 	}
-	if latent.GraphCoverage < latentCoverageThreshold {
-		t.Errorf("GraphCoverage=%.4f should be ≥ threshold=%.4f", latent.GraphCoverage, latentCoverageThreshold)
+	if latent.PosteriorVariance >= latentVarianceSNRThreshold {
+		t.Errorf("PosteriorVariance=%.4f should be < threshold=%.4f", latent.PosteriorVariance, latentVarianceSNRThreshold)
 	}
 
 	// Score must be in CONFIRMED band (≥ 0.75).
@@ -918,10 +916,10 @@ func TestMediumRiskBoundary(t *testing.T) {
 	// All effects are on A which has a path → ResidualRatio = 1.0 (no residual signal)
 	// No ranking instability (prevRanking = nil → instability = 0)
 	// No correlation without path (A has path to C)
-	// Only SignalCoverageCollapse should fire.
+	// Only SignalHighPosteriorVariance should fire.
 	medExp := tExp(
 		[]string{"A"},
-		map[string]float64{"A": 1.0},
+		map[string]float64{"A": 0.40},
 	)
 
 	fusion := FusionResult{
@@ -933,17 +931,17 @@ func TestMediumRiskBoundary(t *testing.T) {
 	latent := AssessLatentRisk(graph, medExp, nil, "C")
 	conf := ComputeConfidence(fusion, graph, medExp, latent)
 
-	expectedCoverage := 2.0 / 5.0 // A and C are on path; D, E, F are not
+	expectedVariance := 0.3125 // 0.05 / 0.40^2
 	logTrustResult(t, "MediumRiskBoundary",
-		latentCoverageThreshold, latent.GraphCoverage,
+		latentVarianceSNRThreshold, latent.PosteriorVariance,
 		latent.Level, conf.State)
 
-	t.Logf("[MediumRiskBoundary] coverage=%.4f (expected≈%.4f, threshold=%.4f)",
-		latent.GraphCoverage, expectedCoverage, latentCoverageThreshold)
+	t.Logf("[MediumRiskBoundary] variance=%.4f (expected≈%.4f, threshold=%.4f)",
+		latent.PosteriorVariance, expectedVariance, latentVarianceSNRThreshold)
 
 	// Only coverage collapse should fire.
-	if latent.Signals != SignalCoverageCollapse {
-		t.Errorf("expected only SignalCoverageCollapse, got signals=%d", latent.Signals)
+	if latent.Signals != SignalHighPosteriorVariance {
+		t.Errorf("expected only SignalHighPosteriorVariance, got signals=%d", latent.Signals)
 	}
 
 	// Exactly one MEDIUM signal → LatentRiskMedium.
