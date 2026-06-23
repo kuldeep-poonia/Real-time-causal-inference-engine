@@ -15,9 +15,15 @@ type NodeState struct {
 	Load            float64 // ρ = λ/μ
 	ArrivalRate     float64 // λ
 	ServiceRate     float64 // μ
-	QueueLength     float64 // L
-	ProcessingDelay float64 // W
+	QueueLength     float64 // L (M/M/1)
+	ProcessingDelay float64 // W (M/M/1)
 	Timestamp       float64
+
+	// Kingman Burst-Aware Variables
+	ArrivalCV2             float64 // C_A^2
+	ServiceCV2             float64 // C_S^2
+	QueueLengthKingman     float64 // L (G/G/1)
+	ProcessingDelayKingman float64 // W (G/G/1)
 }
 
 /*
