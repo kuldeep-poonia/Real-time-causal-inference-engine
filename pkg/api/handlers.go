@@ -257,7 +257,7 @@ func (m MetricsRequest) validate() []string {
 		if math.IsNaN(*m.ServiceRate) || math.IsInf(*m.ServiceRate, 0) {
 			errs = append(errs, "service_rate must be a finite number")
 		} else if *m.ServiceRate <= 0 {
-			errs = append(errs, "service_rate must be > 0 (zero causes undefined load rho=lambda/mu)")
+			errs = append(errs, "service_rate must be > 0 so load can be calculated")
 		} else if *m.ServiceRate > 1e9 {
 			errs = append(errs, "service_rate exceeds maximum (1e9)")
 		}
@@ -296,7 +296,8 @@ type SafetyGate struct {
 	FallbackTriggered bool     `json:"fallback_triggered"`
 	FallbackReasons   []string `json:"fallback_reasons,omitempty"`
 	ProbeNodes        []string `json:"probe_nodes,omitempty"`
-	GraphCoverage     float64  `json:"graph_coverage"`
+	PosteriorVariance float64  `json:"posterior_variance"`
+	PosteriorPrecision float64  `json:"posterior_precision"`
 	Determinism       float64  `json:"determinism"`
 }
 
@@ -325,15 +326,15 @@ type AnalysisResponse struct {
 
 	// Failure semantics — human-readable operational intelligence.
 	// These fields transform abstract causal metrics into SRE-grade language.
-	OperationalState    string                         `json:"operational_state"`
-	IncidentTitle       string                         `json:"incident_title"`
-	FailureCategory     string                         `json:"failure_category"`
-	ConfidenceNarrative string                         `json:"confidence_narrative"`
-	Severity            float64                        `json:"severity"`
-	BlastRadius         int                            `json:"blast_radius"`
-	Timeline            []string                       `json:"timeline,omitempty"`
-	Narrative           []string                       `json:"narrative,omitempty"`
-	Evidence            []orchestrator.FailureEvidence  `json:"evidence,omitempty"`
+	OperationalState    string                           `json:"operational_state"`
+	IncidentTitle       string                           `json:"incident_title"`
+	FailureCategory     string                           `json:"failure_category"`
+	ConfidenceNarrative string                           `json:"confidence_narrative"`
+	Severity            float64                          `json:"severity"`
+	BlastRadius         int                              `json:"blast_radius"`
+	Timeline            []string                         `json:"timeline,omitempty"`
+	Narrative           []string                         `json:"narrative,omitempty"`
+	Evidence            []orchestrator.FailureEvidence   `json:"evidence,omitempty"`
 	Remediation         []orchestrator.RemediationAction `json:"remediation,omitempty"`
 }
 
@@ -520,7 +521,8 @@ func buildSafetyGate(sr *orchestrator.SafetyResult) SafetyGate {
 		FallbackTriggered: sr.Fallback.IsUnknown,
 		FallbackReasons:   reasons,
 		ProbeNodes:        probeNodes,
-		GraphCoverage:     sr.LatentRisk.GraphCoverage,
+		PosteriorVariance: sr.LatentRisk.PosteriorVariance,
+		PosteriorPrecision: sr.Confidence.Components.PosteriorPrecision,
 		Determinism:       sr.Confidence.Components.Determinism,
 	}
 }
@@ -737,7 +739,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		confNarrative = orchestrator.ConfidenceNarrative(
 			c.Score,
 			c.Components.Determinism,
-			c.Components.GraphCoverage,
+			c.Components.PosteriorPrecision,
 			c.Components.ResidualExplained,
 			c.Components.RoleConsistency,
 			sg.LatentRisk,
@@ -870,7 +872,7 @@ func ActHandler(w http.ResponseWriter, r *http.Request) {
 	safety := buildSafetyGate(result.SafetyResult)
 
 	// HARD BLOCK: safety gate UNKNOWN means the system cannot assert a root
-	// cause with acceptable epistemic confidence. No actions are returned.
+	// cause with acceptable confidence. No actions are returned.
 	// HTTP 503 signals a retriable safety condition, not a permanent error.
 	if safety.FallbackTriggered {
 		log.Warn("act blocked by safety gate",
@@ -881,7 +883,7 @@ func ActHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 			"success":     false,
 			"data_source": result.DataSource,
-			"errors":      []string{"safety gate UNKNOWN: automated action blocked — human review required"},
+			"errors":      []string{"not enough confidence for automated action; human review required"},
 			"safety":      safety,
 		})
 		return
@@ -1144,13 +1146,4 @@ func StartServer(ctx context.Context, port int, cfg ServerConfig) error {
 	}
 	baseLog().Info("HTTP server stopped cleanly")
 	return nil
-}
-
-func stringSliceContains(s []string, v string) bool {
-	for _, x := range s {
-		if strings.EqualFold(x, v) {
-			return true
-		}
-	}
-	return false
 }
