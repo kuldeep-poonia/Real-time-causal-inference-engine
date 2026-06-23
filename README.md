@@ -1,8 +1,11 @@
 # ABSIA — Autonomous Bayesian System Intelligence Agent
 
-**Causal intelligence for distributed systems. Drop it into your Docker stack. It figures out the rest.**
+![Go](https://img.shields.io/badge/Go-1.23+-blue?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Ready-brightgreen?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-ABSIA watches your containers, builds a causal model of how they affect each other, identifies the most likely root cause when something goes wrong, and tells you what to do about it — with a safety gate that says *"I don't know"* instead of guessing when confidence is too low.
+> Causal intelligence for distributed systems. Identifies root causes from system metrics using causal inference and Pearl's do-calculus. Drop it into your Docker stack.
 
 ---
 
@@ -38,7 +41,7 @@ docker run -d \
   yourdockerhub/absia:latest
 ```
 
-Open **http://localhost:8080** — the dashboard appears immediately. ABSIA discovers every running container and starts collecting metrics automatically. No config files. No Prometheus setup. No environment variables required.
+Open **http://localhost:8080** — the dashboard appears immediately. ABSIA discovers every running container and starts collecting metrics automatically. No config files. No Prometheus setup. No [...]
 
 ---
 
@@ -115,7 +118,7 @@ After **4 samples**, ABSIA treats that node as real data and includes it in caus
 
 ## API Reference
 
-All endpoints return JSON. All analysis responses include safety gate fields — `confidence_score`, `confidence_state`, `latent_risk`, `fallback_triggered` — regardless of which endpoint you call.
+All endpoints return JSON. All analysis responses include safety gate fields — `confidence_score`, `confidence_state`, `latent_risk`, `fallback_triggered` — regardless of which endpoint you c[...]
 
 ### `GET /health`
 
@@ -401,11 +404,11 @@ Authorization: Bearer your-secret-key
 
 ### Docker Socket Access
 
-Mounting `/var/run/docker.sock` gives ABSIA read access to your container metadata and stats. It uses this only to list running containers and poll CPU/memory. If your threat model requires isolation, you can skip the socket mount entirely — ABSIA falls back gracefully and waits for metrics pushed via `/ingest`.
+Mounting `/var/run/docker.sock` gives ABSIA read access to your container metadata and stats. It uses this only to list running containers and poll CPU/memory. If your threat model requires isola[...]
 
 ### Network Boundaries
 
-ABSIA makes no outbound network calls. It only listens on its configured port and reads from the Docker socket you mount. There are no telemetry calls, no license checks, no external dependencies at runtime.
+ABSIA makes no outbound network calls. It only listens on its configured port and reads from the Docker socket you mount. There are no telemetry calls, no license checks, no external dependencies[...]
 
 ---
 
@@ -474,13 +477,13 @@ No. It is read-only. It reads container metadata and stats. It never restarts, s
 ABSIA starts normally and logs a warning. You can push metrics manually via `POST /ingest` instead. Everything else works.
 
 **How many containers can it handle?**
-The pipeline runs a causal graph over every node. Practically tested up to ~50 nodes. Beyond that, analysis latency increases but the system stays stable — the safety gate will flag low-confidence results automatically.
+The pipeline runs a causal graph over every node. Practically tested up to ~50 nodes. Beyond that, analysis latency increases but the system stays stable — the safety gate will flag low-confide[...]
 
 **Can I run multiple ABSIA instances?**
 Yes, but they won't share state. Each instance maintains its own metrics store and policy weights. For a shared view, push from one instance to another via `/ingest`.
 
 **The safety gate keeps returning UNKNOWN. Why?**
-Usually one of: not enough data yet (need ≥4 samples per node), very high latent risk detected (hidden variable suspected in the causal graph), or ranking instability between consecutive runs (causal structure is changing faster than the window can capture). Check `/health` to confirm `real_data_available: true` and wait for more samples to accumulate.
+Usually one of: not enough data yet (need ≥4 samples per node), very high latent risk detected (hidden variable suspected in the causal graph), or ranking instability between consecutive runs ([...]
 
 ---
 
