@@ -61,19 +61,19 @@ type RemediationAction struct {
 }
 
 type FailureSemantics struct {
-	Category         FailureCategory    `json:"category"`
-	State            OperationalState   `json:"state"`
-	Severity         float64            `json:"severity"`
-	Confidence       float64            `json:"confidence"`
-	RootCause        string             `json:"root_cause,omitempty"`
-	Target           string             `json:"target,omitempty"`
-	BlastRadius      int                `json:"blast_radius"`
-	PropagationDepth int                `json:"propagation_depth"`
-	Summary          string             `json:"summary"`
-	Timeline         []string           `json:"timeline"`
-	Evidence         []FailureEvidence  `json:"evidence"`
+	Category         FailureCategory     `json:"category"`
+	State            OperationalState    `json:"state"`
+	Severity         float64             `json:"severity"`
+	Confidence       float64             `json:"confidence"`
+	RootCause        string              `json:"root_cause,omitempty"`
+	Target           string              `json:"target,omitempty"`
+	BlastRadius      int                 `json:"blast_radius"`
+	PropagationDepth int                 `json:"propagation_depth"`
+	Summary          string              `json:"summary"`
+	Timeline         []string            `json:"timeline"`
+	Evidence         []FailureEvidence   `json:"evidence"`
 	Remediation      []RemediationAction `json:"remediation"`
-	SafetyBlockers    []string           `json:"safety_blockers,omitempty"`
+	SafetyBlockers   []string            `json:"safety_blockers,omitempty"`
 }
 
 func BuildFailureSemantics(
@@ -85,7 +85,7 @@ func BuildFailureSemantics(
 		return &FailureSemantics{
 			Category: CategoryTelemetryBlindSpot,
 			State:    StateWatch,
-			Summary:  "Waiting for telemetry: no real pipeline result is available yet.",
+			Summary:  "Waiting for service data: no real pipeline result is available yet.",
 		}
 	}
 
@@ -120,7 +120,7 @@ func BuildFailureSemantics(
 		Target:           target,
 		BlastRadius:      blastRadius,
 		PropagationDepth: depth,
-		SafetyBlockers:    blockers,
+		SafetyBlockers:   blockers,
 	}
 	sem.Summary = buildSemanticSummary(result, sem, rootState, hasRootState)
 	sem.Timeline = buildSemanticTimeline(result, sem, rootState, hasRootState)
@@ -182,7 +182,7 @@ func classifyFailureCategory(
 		if result.SafetyResult.LatentRisk.Level.String() == "HIGH" {
 			return CategoryHiddenUpstream
 		}
-		if result.SafetyResult.LatentRisk.GraphCoverage > 0 && result.SafetyResult.LatentRisk.GraphCoverage < 0.35 {
+		if result.SafetyResult.LatentRisk.PosteriorVariance > 0.25 {
 			return CategoryTelemetryBlindSpot
 		}
 	}
@@ -283,23 +283,23 @@ func buildSemanticSummary(
 ) string {
 	if sem.RootCause == "" || !hasRootState {
 		if len(sem.SafetyBlockers) > 0 {
-			return "Runtime evidence is still insufficient for a clear operational diagnosis. Safety gate blockers: " + strings.Join(sem.SafetyBlockers, ", ") + "."
+			return "ABSIA does not have enough proof for one clear cause yet. More data is needed because: " + strings.Join(sem.SafetyBlockers, ", ") + "."
 		}
-		return "Waiting for enough real telemetry to identify what broke."
+		return "Waiting for enough real service data to identify what happened."
 	}
 
-	base := fmt.Sprintf("%s is the strongest observed failure point: arrival_rate %.2f, service_rate %.2f, rho %.2f, queue_length %.2f.",
+	base := fmt.Sprintf("%s is the service most likely starting the issue: incoming work %.2f, capacity %.2f, load %.2f, waiting work %.2f.",
 		sem.RootCause, rootState.ArrivalRate, rootState.ServiceRate, rootState.Load, rootState.QueueLength)
-	cause := fmt.Sprintf(" This maps to %s and the current system state is %s.", sem.Category, sem.State)
+	cause := fmt.Sprintf(" This looks like %s. Current system state: %s.", sem.Category, sem.State)
 	propagation := ""
 	if sem.PropagationDepth > 0 && sem.Target != "" && sem.Target != sem.RootCause {
-		propagation = fmt.Sprintf(" The queue-pressure chain reaches %s across %d hop(s).", sem.Target, sem.PropagationDepth)
+		propagation = fmt.Sprintf(" Pressure appears to reach %s across %d step(s).", sem.Target, sem.PropagationDepth)
 	} else if sem.BlastRadius > 1 {
 		propagation = fmt.Sprintf(" %d services are under pressure, so cascade risk is elevated.", sem.BlastRadius)
 	}
 	safety := ""
 	if result != nil && result.SafetyResult != nil && result.SafetyResult.Fallback.IsUnknown {
-		safety = " Automated remediation is blocked because the safety gate does not trust the current causal structure."
+		safety = " Automated fixes are paused because ABSIA is not sure enough yet."
 	}
 	return base + cause + propagation + safety
 }
@@ -312,22 +312,22 @@ func buildSemanticTimeline(
 ) []string {
 	lines := make([]string, 0, 6)
 	if sem.RootCause != "" && hasRootState {
-		lines = append(lines, fmt.Sprintf("%s: runtime pressure formed at rho %.2f with queue_length %.2f.", sem.RootCause, rootState.Load, rootState.QueueLength))
+		lines = append(lines, fmt.Sprintf("%s: pressure started here; load is %.2f and waiting work is %.2f.", sem.RootCause, rootState.Load, rootState.QueueLength))
 	}
 	if result != nil && len(result.PhysicsRootCauses) > 0 {
 		chain := result.PhysicsRootCauses[0].PropagationChain
 		if chain != nil && len(chain.Hops) > 0 {
 			for _, hop := range chain.Hops {
-				lines = append(lines, fmt.Sprintf("%s: effective arrival %.2f vs service %.2f, delay %.2fs, strength %.2f.",
-					hop.NodeID, hop.ArrivalRate, hop.ServiceRate, hop.GeneratedDelay, hop.CausalStrength))
+				lines = append(lines, fmt.Sprintf("%s: incoming work %.2f vs capacity %.2f; expected delay %.2fs.",
+					hop.NodeID, hop.ArrivalRate, hop.ServiceRate, hop.GeneratedDelay))
 			}
 		}
 	}
 	if len(lines) == 0 && len(sem.SafetyBlockers) > 0 {
-		lines = append(lines, "Safety gate blocked root-cause assertion: "+strings.Join(sem.SafetyBlockers, ", ")+".")
+		lines = append(lines, "More proof is needed before naming one cause: "+strings.Join(sem.SafetyBlockers, ", ")+".")
 	}
 	if sem.Target != "" && sem.Target != sem.RootCause {
-		lines = append(lines, fmt.Sprintf("%s: selected analysis target affected by the current causal graph.", sem.Target))
+		lines = append(lines, fmt.Sprintf("%s: selected service may be affected by this issue.", sem.Target))
 	}
 	return lines
 }
@@ -342,10 +342,10 @@ func buildSemanticEvidence(
 	evidence := make([]FailureEvidence, 0, 10)
 	if hasRootState {
 		evidence = append(evidence,
-			FailureEvidence{NodeID: sem.RootCause, Metric: "rho", Value: round3(rootState.Load), Threshold: 0.85, Interpretation: "queue utilisation is at or above pressure threshold"},
-			FailureEvidence{NodeID: sem.RootCause, Metric: "arrival_rate", Value: round3(rootState.ArrivalRate), Interpretation: "observed incoming work rate"},
-			FailureEvidence{NodeID: sem.RootCause, Metric: "service_rate", Value: round3(rootState.ServiceRate), Interpretation: "observed processing capacity"},
-			FailureEvidence{NodeID: sem.RootCause, Metric: "queue_length", Value: round3(rootState.QueueLength), Threshold: 100, Interpretation: "backlog depth from runtime telemetry"},
+			FailureEvidence{NodeID: sem.RootCause, Metric: "load", Value: round3(rootState.Load), Threshold: 0.85, Interpretation: "load is at or above the pressure threshold"},
+			FailureEvidence{NodeID: sem.RootCause, Metric: "incoming_work", Value: round3(rootState.ArrivalRate), Interpretation: "incoming work observed for this service"},
+			FailureEvidence{NodeID: sem.RootCause, Metric: "capacity", Value: round3(rootState.ServiceRate), Interpretation: "processing capacity observed for this service"},
+			FailureEvidence{NodeID: sem.RootCause, Metric: "waiting_work", Value: round3(rootState.QueueLength), Threshold: 100, Interpretation: "waiting work reported by service data"},
 		)
 	}
 	for _, nodeID := range pressureNodeIDs(nodeStates) {
@@ -355,30 +355,30 @@ func buildSemanticEvidence(
 		st := normalizedNodeState(nodeStates[nodeID])
 		evidence = append(evidence, FailureEvidence{
 			NodeID:         nodeID,
-			Metric:         "rho",
+			Metric:         "load",
 			Value:          round3(st.Load),
 			Threshold:      0.85,
-			Interpretation: "additional node under pressure in the same observation window",
+			Interpretation: "another service needs attention at the same time",
 		})
 	}
 	if result != nil && result.Phase2Dynamics != nil {
 		evidence = append(evidence, FailureEvidence{
 			Metric:         "dynamics",
 			Value:          round3(result.Phase2Dynamics.DivergenceRate),
-			Interpretation: fmt.Sprintf("system dynamics classified as %s", result.Phase2Dynamics.Type),
+			Interpretation: fmt.Sprintf("recent service behavior is classified as %s", result.Phase2Dynamics.Type),
 		})
 	}
 	if result != nil {
 		evidence = append(evidence, FailureEvidence{
 			Metric:         "patterns_detected",
 			Value:          float64(len(result.Phase2Patterns)),
-			Interpretation: "phase 2 pattern detections in the real telemetry window",
+			Interpretation: "patterns found in recent service data",
 		})
 	}
 	if result != nil && result.SafetyResult != nil {
 		evidence = append(evidence,
-			FailureEvidence{Metric: "graph_coverage", Value: round3(result.SafetyResult.LatentRisk.GraphCoverage), Threshold: 0.50, Interpretation: "fraction of graph nodes covered by identified causal paths"},
-			FailureEvidence{Metric: "determinism", Value: round3(result.SafetyResult.Confidence.Components.Determinism), Threshold: 0.45, Interpretation: "ranking stability used by the confidence engine"},
+			FailureEvidence{Metric: "bayesian_posterior_variance", Value: round3(result.SafetyResult.LatentRisk.PosteriorVariance), Threshold: 0.25, Interpretation: "ratio of uncertainty variance to squared effect"},
+			FailureEvidence{Metric: "consistency", Value: round3(result.SafetyResult.Confidence.Components.Determinism), Threshold: 0.45, Interpretation: "how consistent the likely cause is between checks"},
 		)
 	}
 	return evidence
@@ -413,33 +413,33 @@ func buildSemanticRemediation(
 
 	switch sem.Category {
 	case CategoryAuthBottleneck:
-		add("scale auth-service capacity", "auth path is the strongest observed pressure point", "raises service_rate and reduces authentication queueing")
-		add("throttle auth retry fanout", "retry amplification can overload auth dependencies during latency spikes", "reduces arrival_rate into the bottleneck")
+		add("add capacity to auth-service", "auth is the strongest observed pressure point", "raises capacity and reduces authentication waiting")
+		add("slow down repeated auth retries", "retry bursts can overload auth dependencies during latency spikes", "reduces incoming work into the bottleneck")
 		add("enable token-cache or degraded auth mode", "serves repeat validation locally while upstream auth recovers", "shrinks request latency and dependency pressure")
 	case CategoryDBSaturation:
-		add("scale db-proxy replicas", "database proxy shows queue pressure or saturation", "adds processing capacity and reduces queue_length")
+		add("add db-proxy replicas", "database proxy shows waiting work or saturation", "adds processing capacity and reduces waiting work")
 		add("increase connection pool within safe database limits", "pool starvation can hold requests even when CPU is not saturated", "reduces waiting time at the proxy")
-		add("shed low-priority database work", "protects critical paths while backlog drains", "lowers arrival_rate until rho returns below 1")
+		add("pause low-priority database work", "protects critical paths while backlog drains", "lowers incoming work until load returns below saturation")
 	case CategoryCascadingFailure, CategoryBackpressureCollapse:
 		add("apply circuit breaker at the upstream caller", "multiple services are under pressure in the same causal window", "prevents further propagation")
-		add("throttle ingress to the saturated path", "arrival_rate is exceeding safe utilisation", "reduces queue growth and timeout amplification")
+		add("slow incoming traffic to the saturated path", "incoming work is exceeding safe capacity", "reduces queue growth and timeout amplification")
 		add("isolate the failing dependency", "cascade risk is elevated", "keeps unaffected services from joining the failure chain")
 	case CategoryPoolStarvation:
-		add("increase pool size or worker concurrency cautiously", "backlog is high while current utilisation is below saturation", "releases queued work without overloading downstream capacity")
-		add("audit blocked connections or worker leases", "queue growth without matching rho can indicate pool starvation", "restores effective service_rate")
+		add("increase pool size or worker concurrency cautiously", "waiting work is high while current load is below saturation", "releases queued work without overloading downstream capacity")
+		add("check blocked connections or worker leases", "waiting work can build when workers are stuck", "restores effective capacity")
 	case CategoryQueueSaturation, CategoryTrafficSurgeCollapse, CategoryRetryStorm, CategoryTimeoutAmplification:
-		add("reduce upstream concurrency", "arrival_rate is at or above service capacity", "brings rho back below saturation")
+		add("reduce upstream concurrency", "incoming work is at or above service capacity", "brings load back below saturation")
 		add("drain queues before raising retry budgets", "existing backlog is operational evidence of pressure", "reduces timeout amplification")
-		add("scale the saturated service", "capacity is below observed demand", "increases service_rate for the hot path")
+		add("add capacity to the saturated service", "capacity is below observed demand", "increases capacity for the hot path")
 	case CategoryResourceThrashing:
 		add("stabilize workload concurrency", "oscillating dynamics indicate repeated over-correction", "reduces utilisation swings")
-		add("pinpoint noisy workloads on the service", "thrashing consumes capacity without stable throughput", "restores predictable service_rate")
+		add("pinpoint noisy workloads on the service", "thrashing consumes capacity without stable throughput", "restores predictable capacity")
 	default:
-		add("collect targeted telemetry before remediation", "the current evidence does not support a safe operational action", "improves graph coverage and confidence")
+		add("collect targeted service data before acting", "the current evidence does not support a safe operational action", "improves coverage and confidence")
 	}
 
 	if hasRootState && rootState.Load >= 1.20 {
-		add("shed non-critical traffic", "rho is materially above 1.0", "stops unbounded queue growth while capacity recovers")
+		add("shed non-critical traffic", "load is materially above safe capacity", "stops unbounded queue growth while capacity recovers")
 	}
 	return actions
 }
@@ -460,7 +460,7 @@ func fallbackRemediation(result *PipelineResult, sem *FailureSemantics) []Remedi
 			Confidence:     sem.Confidence,
 		})
 	}
-	add("pause automated remediation", "safety gate returned UNKNOWN", "prevents acting on an untrusted causal assignment")
+	add("pause automated fixes", "ABSIA is not sure enough yet", "prevents unsafe automated action")
 	if result != nil && result.SafetyResult != nil {
 		for _, probe := range result.SafetyResult.Fallback.ProbeRecommendations {
 			actions = append(actions, RemediationAction{
@@ -468,13 +468,13 @@ func fallbackRemediation(result *PipelineResult, sem *FailureSemantics) []Remedi
 				Target:         probe.NodeID,
 				Priority:       len(actions) + 1,
 				Rationale:      probe.Rationale,
-				ExpectedEffect: "improves observability for the blocked causal path",
+				ExpectedEffect: "adds the missing data needed for a safer answer",
 				Confidence:     sem.Confidence,
 			})
 		}
 	}
 	if len(actions) == 1 {
-		add("instrument upstream dependency latency", "hidden upstream failure or telemetry blind spot is plausible", "separates true dependency delay from local saturation")
+		add("measure upstream dependency latency", "a connected service may be missing from the data", "shows whether the delay comes from this service or a dependency")
 	}
 	return actions
 }
@@ -561,7 +561,7 @@ func round3(v float64) float64 {
 }
 
 // ============================================================================
-// CONFIDENCE NARRATIVE — plain-English explanation of confidence components
+// CONFIDENCE NARRATIVE - plain-English explanation of confidence components
 // ============================================================================
 
 // ConfidenceNarrative converts raw confidence components into a human-readable
@@ -569,262 +569,137 @@ func round3(v float64) float64 {
 func ConfidenceNarrative(score float64, determinism, graphCoverage, residualExplained, roleConsistency float64, latentRisk, fallbackReason string) string {
 	if latentRisk == "HIGH" {
 		if graphCoverage < 0.25 {
-			return "Confidence is blocked because fewer than 25% of observed infrastructure nodes appear in the causal model. The majority of the system is invisible to the causal engine — a hidden service is almost certainly influencing the failure."
+			return "I cannot safely name one cause yet because most observed services are not represented in the current service map. Add service data for the missing services, then run the check again."
 		}
 		if determinism < 0.3 {
-			return "Confidence is blocked because the dominant root-cause changed between inference passes. The causal graph is actively unstable, which means the system state is still evolving or multiple competing failure modes are present simultaneously."
+			return "I am not fully sure because the likely cause changed between recent checks. The incident may still be moving, so review the service list before taking action."
 		}
-		return "Confidence is blocked because a hidden variable is likely influencing the system. Latency or load increased without corresponding saturation on all known infrastructure nodes, suggesting an unmonitored upstream dependency."
+		return "I am not fully sure because a connected service may be involved but is not sending enough data yet."
 	}
 	if score >= 0.75 {
-		return "High confidence: causal paths are stable, graph coverage is adequate, and multiple evidence channels corroborate the same root cause. Automated remediation is permissible."
+		return "I am confident enough to act: the same likely cause is showing up consistently, enough services were checked, and the evidence points in one direction."
 	}
 	reasons := make([]string, 0, 4)
 	if determinism < 0.5 {
-		reasons = append(reasons, "the root-cause ranking changed between consecutive inference cycles — the system state may still be evolving")
+		reasons = append(reasons, "the likely cause changed between checks")
 	}
 	if graphCoverage < 0.5 {
-		pct := int(graphCoverage * 100)
-		reasons = append(reasons, fmt.Sprintf("only %d%% of observed nodes lie on identified causal paths — the graph model does not fully represent the running system", pct))
+		reasons = append(reasons, fmt.Sprintf("only %d%% of services were connected clearly enough to explain", int(graphCoverage*100)))
 	}
 	if residualExplained < 0.4 {
-		reasons = append(reasons, "the majority of observed signal variation is not accounted for by any identified causal path — unexplained variance suggests a missing dependency or hidden load spike")
+		reasons = append(reasons, "some load changes are still unexplained")
 	}
 	if roleConsistency < 0.5 {
-		reasons = append(reasons, "the fusion layer and the explanation layer disagree on which nodes are causal actors — structural inconsistency reduces trust in the root-cause assignment")
+		reasons = append(reasons, "different checks disagree about which service started it")
 	}
 	if len(reasons) == 0 {
-		return fmt.Sprintf("Moderate confidence (%.0f%%). Evidence is partially consistent but carries material uncertainty. Human review is recommended before automated intervention.", score*100)
+		return fmt.Sprintf("I am %.0f%% sure. Review the suggested steps before acting.", score*100)
 	}
-	msg := fmt.Sprintf("Confidence is reduced to %.0f%% because: ", score*100)
-	for i, r := range reasons {
-		if i > 0 {
-			msg += "; and "
-		}
-		msg += r
-	}
-	msg += "."
-	return msg
+	return fmt.Sprintf("I am %.0f%% sure because %s.", score*100, strings.Join(reasons, "; "))
 }
 
 // IncidentTitle generates a concise, operator-facing incident title.
 func IncidentTitle(sem *FailureSemantics) string {
 	if sem == nil {
-		return "System Status Indeterminate"
+		return "Waiting for service data"
+	}
+	root := firstNode(sem.RootCause, sem.Target)
+	if root == "" {
+		root = "a service"
 	}
 	switch sem.State {
 	case StateHealthy:
-		return "System Healthy — No Active Incident"
+		return "All checked services look healthy"
 	case StateWatch:
-		return fmt.Sprintf("Watch: %s showing early pressure signals", firstNode(sem.RootCause, sem.Target))
+		return fmt.Sprintf("%s needs watching", root)
 	case StateRecovering:
-		return fmt.Sprintf("Recovering: %s pressure subsiding", firstNode(sem.RootCause, sem.Target))
+		return fmt.Sprintf("%s is recovering", root)
 	}
-	root := sem.RootCause
-	if root == "" {
-		root = sem.Target
+	if sem.BlastRadius > 1 {
+		return fmt.Sprintf("%d services need help; likely start: %s", sem.BlastRadius, root)
 	}
-	switch sem.Category {
-	case CategoryRetryStorm:
-		return fmt.Sprintf("Retry Storm: %s amplifying request pressure across %d services", root, sem.BlastRadius)
-	case CategoryQueueSaturation:
-		return fmt.Sprintf("Queue Saturation: %s queue backlog exceeds capacity", root)
-	case CategoryPoolStarvation:
-		return fmt.Sprintf("Pool Starvation: %s connection pool exhausted with high backlog", root)
-	case CategoryCascadingFailure:
-		return fmt.Sprintf("Cascading Failure: %d services under pressure — chain started at %s", sem.BlastRadius, root)
-	case CategoryAuthBottleneck:
-		return fmt.Sprintf("Auth Bottleneck: authentication path at %s saturated", root)
-	case CategoryDBSaturation:
-		return fmt.Sprintf("Database Saturation: %s database layer at or above capacity", root)
-	case CategoryHiddenUpstream:
-		return fmt.Sprintf("Hidden Upstream Failure: unmonitored dependency influencing %s", firstNode(sem.Target, root))
-	case CategoryTelemetryBlindSpot:
-		return "Telemetry Blind Spot: insufficient observability for root-cause assertion"
-	case CategoryTimeoutAmplification:
-		return fmt.Sprintf("Timeout Amplification: %s generating cascading timeout pressure", root)
-	case CategoryDependencyStall:
-		return fmt.Sprintf("Dependency Stall: %s stalled — queue growing without arrival rate", root)
-	case CategoryResourceThrashing:
-		return fmt.Sprintf("Resource Thrashing: %s workload oscillating — utilisation unstable", root)
-	case CategoryEventLoopSaturation:
-		return fmt.Sprintf("Event Loop Saturation: %s event loop at 100%% utilisation", root)
-	case CategoryLockContention:
-		return fmt.Sprintf("Lock Contention: %s blocking on serialised resource", root)
-	case CategoryBackpressureCollapse:
-		return fmt.Sprintf("Backpressure Collapse: %d services pushing back — system-wide pressure", sem.BlastRadius)
-	case CategoryTrafficSurgeCollapse:
-		return fmt.Sprintf("Traffic Surge: %s overwhelmed by sudden arrival rate increase", root)
-	}
-	return fmt.Sprintf("%s: %s under pressure (%s)", sem.State, root, sem.Category)
+	return fmt.Sprintf("%s needs help", root)
 }
 
 // OperationalNarrative generates a full SRE-style incident narrative from the pipeline result.
 // The output reads like a senior engineer describing what is happening and why.
 func OperationalNarrative(sem *FailureSemantics) []string {
 	if sem == nil {
-		return []string{"No pipeline result available. Waiting for telemetry."}
+		return []string{"I am waiting for enough service data to explain what is happening."}
 	}
-	lines := make([]string, 0, 8)
+	lines := make([]string, 0, 6)
+	root := firstNode(sem.RootCause, sem.Target)
+	if root == "" {
+		root = "the selected service"
+	}
 
-	// Opening state
 	switch sem.State {
 	case StateHealthy:
-		lines = append(lines, "All observed services are operating within normal parameters.")
-		return lines
+		return []string{"What is happening: all checked services look healthy right now.", "Why: incoming work is staying within available capacity.", "How to proceed: keep monitoring; no fix is needed."}
 	case StateWatch:
-		lines = append(lines, fmt.Sprintf("%s is showing early signs of pressure but has not crossed failure thresholds.", firstNode(sem.RootCause, sem.Target)))
+		lines = append(lines, fmt.Sprintf("What is happening: %s is starting to show pressure, but it has not crossed a failure threshold.", root))
 	case StateRecovering:
-		lines = append(lines, fmt.Sprintf("The system is recovering. %s pressure is subsiding — dynamics are converging toward stable state.", firstNode(sem.RootCause, sem.Target)))
-		return lines
+		return []string{fmt.Sprintf("What is happening: %s is recovering.", root), "Why: recent pressure is going down instead of spreading.", "How to proceed: keep monitoring until the service stays stable."}
 	default:
-		lines = append(lines, fmt.Sprintf("An active %s has been detected.", strings.ToLower(string(sem.Category))))
+		lines = append(lines, fmt.Sprintf("What is happening: %s is the service most likely starting the current problem.", root))
 	}
 
-	// Root cause
-	if sem.RootCause != "" {
-		root := sem.RootCause
-		for _, ev := range sem.Evidence {
-			if ev.NodeID == root && ev.Metric == "rho" {
-				lines = append(lines, fmt.Sprintf("%s is the strongest observed failure point with a utilisation ratio (ρ) of %.2f — a value above 1.0 means arrivals exceed service capacity and the queue grows unboundedly.", root, ev.Value))
-				break
-			}
-		}
-	}
-
-	// Timeline / propagation
-	if len(sem.Timeline) > 0 {
-		lines = append(lines, "Causal chain:")
-		for _, step := range sem.Timeline {
-			lines = append(lines, "  → "+step)
-		}
-	}
-
-	// Blast radius
 	if sem.BlastRadius > 1 {
-		lines = append(lines, fmt.Sprintf("%d services are currently under pressure in the same observation window, elevating cascade risk.", sem.BlastRadius))
+		lines = append(lines, fmt.Sprintf("Why it matters: %d services are under pressure in the same time window, so the issue may spread if load is not reduced.", sem.BlastRadius))
+	} else if sem.RootCause != "" {
+		lines = append(lines, "Why it matters: the service is receiving more work or holding more backlog than it can comfortably process.")
 	}
 
-	// Hidden variable assessment
-	if sem.Category == CategoryHiddenUpstream {
-		lines = append(lines, "A hidden upstream dependency is the most probable explanation: latency increased without corresponding CPU, memory, or network saturation on any monitored node. The failing service is not directly observable.")
+	if len(sem.Timeline) > 0 {
+		lines = append(lines, "How it appears to be happening: "+strings.Join(sem.Timeline, " "))
 	}
-	if sem.Category == CategoryTelemetryBlindSpot {
-		lines = append(lines, "Telemetry coverage is insufficient to safely assert a root cause. The causal model covers less than half the observable system. Instrumentation gaps must be closed before automated remediation is safe.")
+	if len(sem.Remediation) > 0 {
+		lines = append(lines, "How to fix first: "+sem.Remediation[0].Action+". Reason: "+sem.Remediation[0].Rationale+".")
 	}
-
-	// Safety gate
 	if len(sem.SafetyBlockers) > 0 {
-		lines = append(lines, fmt.Sprintf("Automated remediation is blocked: %s.", strings.Join(sem.SafetyBlockers, "; ")))
+		lines = append(lines, "Before acting: more proof is needed because "+strings.Join(sem.SafetyBlockers, ", ")+".")
 	}
-
 	return lines
 }
 
 // ExploreQuestion answers a natural-language operator question using deterministic
 // pattern matching over the failure semantics and pipeline result.
-// No LLM. No external calls. Pure signal → language translation.
+// No LLM. No external calls. Pure signal-to-language translation.
 func ExploreQuestion(question string, sem *FailureSemantics, confidenceNarrative, incidentTitle string) ExploreAnswer {
 	q := strings.ToLower(strings.TrimSpace(question))
+	root := firstNode(sem.RootCause, sem.Target)
+	if root == "" {
+		root = "the selected service"
+	}
 
-	// Why / root cause
 	if containsAny(q, "why", "cause", "root", "origin", "start") {
-		narrative := OperationalNarrative(sem)
 		return ExploreAnswer{
 			Question: question,
-			Answer:   strings.Join(narrative, "\n"),
-			Category: "root_cause",
+			Answer:   strings.Join(OperationalNarrative(sem), "\n"),
+			Category: "why",
 			Evidence: sem.Evidence,
 			Actions:  sem.Remediation,
 		}
 	}
 
-	// Confidence
-	if containsAny(q, "confidence", "trust", "certain", "sure", "determinism", "coverage") {
-		return ExploreAnswer{
-			Question: question,
-			Answer:   confidenceNarrative,
-			Category: "confidence",
-			Evidence: sem.Evidence,
-		}
-	}
-
-	// What to do / remediation
-	if containsAny(q, "do", "fix", "remediat", "action", "resolve", "mitigat", "help") {
+	if containsAny(q, "do", "fix", "remediat", "action", "resolve", "mitigat", "help", "how") {
 		if len(sem.Remediation) == 0 {
-			return ExploreAnswer{
-				Question: question,
-				Answer:   "No specific remediation is available yet — the system is still building enough telemetry to make a confident assertion. Continue monitoring.",
-				Category: "remediation",
-			}
+			return ExploreAnswer{Question: question, Answer: "I do not have a safe fix yet. Keep collecting service data until the likely cause is clearer.", Category: "how"}
 		}
-		actions := make([]string, 0, len(sem.Remediation))
+		steps := make([]string, 0, len(sem.Remediation))
 		for _, r := range sem.Remediation {
-			actions = append(actions, fmt.Sprintf("[%d] %s — %s (expected: %s)", r.Priority, r.Action, r.Rationale, r.ExpectedEffect))
+			steps = append(steps, fmt.Sprintf("%d. %s. Why: %s. Expected result: %s.", r.Priority, r.Action, r.Rationale, r.ExpectedEffect))
 		}
-		return ExploreAnswer{
-			Question: question,
-			Answer:   "Recommended actions in priority order:\n" + strings.Join(actions, "\n"),
-			Category: "remediation",
-			Actions:  sem.Remediation,
-		}
+		return ExploreAnswer{Question: question, Answer: "Try these steps in order:\n" + strings.Join(steps, "\n"), Category: "how", Actions: sem.Remediation}
 	}
 
-	// Retry storm / retries
-	if containsAny(q, "retry", "storm", "amplif", "fanout") {
-		if sem.Category == CategoryRetryStorm {
-			return ExploreAnswer{
-				Question: question,
-				Answer:   fmt.Sprintf("A retry storm is active. %s is generating excessive retry traffic that is amplifying load across %d downstream services. The arrival rate exceeds service capacity, causing queues to grow. Each timeout triggers additional retries, compounding the overload.", sem.RootCause, sem.BlastRadius),
-				Category: "retry_storm",
-				Evidence: sem.Evidence,
-				Actions:  sem.Remediation,
-			}
-		}
-		return ExploreAnswer{
-			Question: question,
-			Answer:   fmt.Sprintf("No retry storm pattern detected. Current failure category is %s. Retry amplification is not the dominant signal in the current telemetry window.", sem.Category),
-			Category: "retry_storm",
-			Evidence: sem.Evidence,
-		}
+	if containsAny(q, "confidence", "trust", "certain", "sure") {
+		return ExploreAnswer{Question: question, Answer: confidenceNarrative, Category: "confidence", Evidence: sem.Evidence}
 	}
 
-	// Hidden / latent / invisible
-	if containsAny(q, "hidden", "latent", "invisible", "unknown", "mystery", "upstream") {
-		if sem.Category == CategoryHiddenUpstream {
-			return ExploreAnswer{
-				Question: question,
-				Answer:   "A hidden upstream failure is the most probable explanation. The causal engine detected latency and load increase in monitored services without corresponding infrastructure saturation (CPU, memory, network) on any known node. This pattern is the canonical signature of an unmonitored upstream dependency failing silently. The failing service is not in the current causal graph.",
-				Category: "latent_variable",
-				Evidence: sem.Evidence,
-			}
-		}
-		return ExploreAnswer{
-			Question: question,
-			Answer:   fmt.Sprintf("No strong hidden-variable signal detected in the current pass. The current failure pattern is classified as %s. Latent risk is assessed based on graph coverage and residual unexplained signal — check the confidence panel for current levels.", sem.Category),
-			Category: "latent_variable",
-			Evidence: sem.Evidence,
-		}
-	}
-
-	// What changed / dynamics
-	if containsAny(q, "changed", "change", "different", "dynamic", "spike", "spike", "surge") {
-		return ExploreAnswer{
-			Question: question,
-			Answer:   fmt.Sprintf("Current system state: %s. Failure pattern: %s. Blast radius: %d service(s) affected. Propagation depth: %d causal hops from root to target. The incident title is: %s", sem.State, sem.Category, sem.BlastRadius, sem.PropagationDepth, incidentTitle),
-			Category: "dynamics",
-			Evidence: sem.Evidence,
-		}
-	}
-
-	// Evidence / metrics
-	if containsAny(q, "evidence", "metric", "data", "signal", "telemetry", "number") {
+	if containsAny(q, "evidence", "metric", "data", "signal", "telemetry", "number", "check") {
 		if len(sem.Evidence) == 0 {
-			return ExploreAnswer{
-				Question: question,
-				Answer:   "No evidence available yet. The system needs at least 4 samples per node (~32 seconds) before causal analysis can begin.",
-				Category: "evidence",
-			}
+			return ExploreAnswer{Question: question, Answer: "No evidence is available yet. The system needs at least 4 samples per service before it can explain the issue.", Category: "evidence"}
 		}
 		parts := make([]string, 0, len(sem.Evidence))
 		for _, ev := range sem.Evidence {
@@ -832,42 +707,18 @@ func ExploreQuestion(question string, sem *FailureSemantics, confidenceNarrative
 			if node == "" {
 				node = "system"
 			}
-			parts = append(parts, fmt.Sprintf("%s/%s = %.3f (threshold: %.3f) — %s", node, ev.Metric, ev.Value, ev.Threshold, ev.Interpretation))
+			parts = append(parts, fmt.Sprintf("%s: %s", node, ev.Interpretation))
 		}
-		return ExploreAnswer{
-			Question: question,
-			Answer:   "Current operational evidence:\n" + strings.Join(parts, "\n"),
-			Category: "evidence",
-			Evidence: sem.Evidence,
-		}
+		return ExploreAnswer{Question: question, Answer: "What I checked:\n" + strings.Join(parts, "\n"), Category: "evidence", Evidence: sem.Evidence}
 	}
 
-	// Service / which service
 	if containsAny(q, "service", "which", "who", "node", "container") {
-		root := sem.RootCause
-		if root == "" {
-			root = sem.Target
-		}
-		if root == "" {
-			return ExploreAnswer{
-				Question: question,
-				Answer:   "No specific service has been identified as the root cause yet. The causal engine needs more telemetry samples or the system may be healthy.",
-				Category: "service",
-			}
-		}
-		return ExploreAnswer{
-			Question: question,
-			Answer:   fmt.Sprintf("The identified root cause is: %s. Current failure classification: %s. System state: %s. %d service(s) are affected in total.", root, sem.Category, sem.State, sem.BlastRadius),
-			Category: "service",
-			Evidence: sem.Evidence,
-		}
+		return ExploreAnswer{Question: question, Answer: fmt.Sprintf("The service to look at first is %s. Current status: %s. Services affected: %d.", root, sem.State, sem.BlastRadius), Category: "service", Evidence: sem.Evidence}
 	}
 
-	// Default — summarise state
-	narrative := OperationalNarrative(sem)
 	return ExploreAnswer{
 		Question: question,
-		Answer:   fmt.Sprintf("Current status: %s\n\n%s", incidentTitle, strings.Join(narrative, "\n")),
+		Answer:   fmt.Sprintf("%s\n\n%s", incidentTitle, strings.Join(OperationalNarrative(sem), "\n")),
 		Category: "summary",
 		Evidence: sem.Evidence,
 		Actions:  sem.Remediation,
@@ -876,10 +727,10 @@ func ExploreQuestion(question string, sem *FailureSemantics, confidenceNarrative
 
 // ExploreAnswer is the structured response from ExploreQuestion.
 type ExploreAnswer struct {
-	Question string            `json:"question"`
-	Answer   string            `json:"answer"`
-	Category string            `json:"category"`
-	Evidence []FailureEvidence  `json:"evidence,omitempty"`
+	Question string              `json:"question"`
+	Answer   string              `json:"answer"`
+	Category string              `json:"category"`
+	Evidence []FailureEvidence   `json:"evidence,omitempty"`
 	Actions  []RemediationAction `json:"actions,omitempty"`
 }
 
