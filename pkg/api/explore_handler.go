@@ -29,7 +29,7 @@ func ExploreHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(orchestrator.ExploreAnswer{
 			Question: req.Question,
-			Answer:   "No causal intelligence data available yet. Waiting for enough telemetry samples to build the initial model (requires at least 4 samples per node).",
+			Answer:   "No service explanation is available yet. ABSIA is waiting for at least 4 samples per service.",
 			Category: "no_data",
 		})
 		return
@@ -42,15 +42,19 @@ func ExploreHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type SemanticsResponse struct {
-	OperationalState    string                         `json:"operational_state"`
-	IncidentTitle       string                         `json:"incident_title"`
-	FailureCategory     string                         `json:"failure_category"`
-	ConfidenceNarrative string                         `json:"confidence_narrative"`
-	Severity            float64                        `json:"severity"`
-	BlastRadius         int                            `json:"blast_radius"`
-	Timeline            []string                       `json:"timeline,omitempty"`
-	Narrative           []string                       `json:"narrative,omitempty"`
-	Evidence            []orchestrator.FailureEvidence  `json:"evidence,omitempty"`
+	OperationalState    string                           `json:"operational_state"`
+	IncidentTitle       string                           `json:"incident_title"`
+	FailureCategory     string                           `json:"failure_category"`
+	RootCause           string                           `json:"root_cause,omitempty"`
+	Target              string                           `json:"target,omitempty"`
+	ConfidenceScore     float64                          `json:"confidence_score,omitempty"`
+	ConfidenceState     string                           `json:"confidence_state,omitempty"`
+	ConfidenceNarrative string                           `json:"confidence_narrative"`
+	Severity            float64                          `json:"severity"`
+	BlastRadius         int                              `json:"blast_radius"`
+	Timeline            []string                         `json:"timeline,omitempty"`
+	Narrative           []string                         `json:"narrative,omitempty"`
+	Evidence            []orchestrator.FailureEvidence   `json:"evidence,omitempty"`
 	Remediation         []orchestrator.RemediationAction `json:"remediation,omitempty"`
 }
 
@@ -67,8 +71,8 @@ func SemanticsHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(SemanticsResponse{
 			OperationalState:    "UNKNOWN",
-			IncidentTitle:       "Waiting for initial telemetry...",
-			ConfidenceNarrative: "The system is gathering initial samples to build the causal graph.",
+			IncidentTitle:       "Waiting for service data...",
+			ConfidenceNarrative: "ABSIA is gathering initial service samples.",
 		})
 		return
 	}
@@ -77,6 +81,10 @@ func SemanticsHandler(w http.ResponseWriter, r *http.Request) {
 		OperationalState:    string(sem.State),
 		IncidentTitle:       title,
 		FailureCategory:     string(sem.Category),
+		RootCause:           sem.RootCause,
+		Target:              sem.Target,
+		ConfidenceScore:     sem.Confidence,
+		ConfidenceState:     confidenceStateLabel(sem.Confidence),
 		ConfidenceNarrative: confNarrative,
 		Severity:            sem.Severity,
 		BlastRadius:         sem.BlastRadius,
@@ -88,4 +96,15 @@ func SemanticsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func confidenceStateLabel(score float64) string {
+	switch {
+	case score >= 0.75:
+		return "Confident"
+	case score >= 0.45:
+		return "Needs review"
+	default:
+		return "Not sure yet"
+	}
 }
