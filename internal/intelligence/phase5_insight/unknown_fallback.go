@@ -39,7 +39,7 @@ const (
 	FallbackReasonLatentHighRisk     FallbackReason = 1 // latent.Level == LatentRiskHigh
 	FallbackReasonLowConfidence      FallbackReason = 2 // confidence.Score < probableThreshold
 	FallbackReasonGraphMismatch      FallbackReason = 3 // fusion root not present in graph
-	FallbackReasonSevereCoverage     FallbackReason = 4 // coverage < fallbackSevereThreshold
+	FallbackReasonSevereVariance     FallbackReason = 4 // variance > fallbackSevereVarianceThreshold
 	FallbackReasonRankingInstability FallbackReason = 5 // SignalRankingInstability in latent
 )
 
@@ -52,8 +52,8 @@ func (r FallbackReason) String() string {
 		return "LOW_CONFIDENCE"
 	case FallbackReasonGraphMismatch:
 		return "GRAPH_MISMATCH"
-	case FallbackReasonSevereCoverage:
-		return "SEVERE_COVERAGE_COLLAPSE"
+	case FallbackReasonSevereVariance:
+		return "SEVERE_POSTERIOR_VARIANCE"
 	case FallbackReasonRankingInstability:
 		return "RANKING_INSTABILITY"
 	default:
@@ -104,15 +104,12 @@ Fallback-specific thresholds (additional to those in confidence_engine.go).
 */
 
 const (
-	// fallbackSevereThreshold: 0.30
-	// A more conservative floor than latentCoverageThreshold (0.50).
-	// At ≤ 0.30 coverage, fewer than 1-in-3 graph nodes participate in any
-	// identified causal path. This represents a severe structural mismatch
-	// between the inferred model and the observable system. Used as an
-	// independent fallback gate rather than delegating to the latent guard,
-	// because coverage collapse at this level indicates the graph itself may
-	// be the wrong model entirely — not merely incomplete.
-	fallbackSevereThreshold = 0.30
+	// fallbackSevereVarianceThreshold: 0.40
+	// A more conservative ceiling than latentVarianceSNRThreshold (0.25).
+	// At >= 0.40 variance ratio, the causal effect is deeply buried in noise.
+	// This represents a severe structural mismatch between the inferred model
+	// and the observable system. Used as an independent fallback gate.
+	fallbackSevereVarianceThreshold = 0.40
 )
 
 // EvaluateFallback is the final safety gate in the Phase 5 fusion pipeline.
@@ -123,7 +120,7 @@ const (
 //  Gate 1 — Latent HIGH risk (unconditional: no model should assert under HIGH)
 //  Gate 2 — Confidence below safe operating threshold
 //  Gate 3 — Graph mismatch (fusion root names nodes absent from graph)
-//  Gate 4 — Severe coverage collapse (independent of latent guard's coverage check)
+//  Gate 4 — Severe posterior variance (independent of latent guard's variance check)
 //  Gate 5 — Ranking instability was a direct latent trigger
 //
 // If any gate fires, IsUnknown is true and ProbeRecommendations are generated.
@@ -163,12 +160,12 @@ func EvaluateFallback(
 		reasons = append(reasons, FallbackReasonGraphMismatch)
 	}
 
-	// Gate 4: Severe coverage collapse.
-	// This gate fires at a lower threshold (0.30) than the latent guard's
-	// coverage check (0.50), making it an independent backstop for extreme cases
+	// Gate 4: Severe posterior variance.
+	// This gate fires at a higher threshold (0.40) than the latent guard's
+	// variance check (0.25), making it an independent backstop for extreme cases
 	// where model structure is fundamentally wrong.
-	if latent.GraphCoverage < fallbackSevereThreshold {
-		reasons = append(reasons, FallbackReasonSevereCoverage)
+	if latent.PosteriorVariance > fallbackSevereVarianceThreshold {
+		reasons = append(reasons, FallbackReasonSevereVariance)
 	}
 
 	// Gate 5: Ranking instability triggered directly in the latent report.
