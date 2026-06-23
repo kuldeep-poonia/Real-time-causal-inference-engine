@@ -17,10 +17,10 @@ a single bounded confidence score in [0.0, 1.0] and a categorical state verdict:
 
 Score formula (linear weighted sum with penalty):
 
-  score = w_coverage   × GraphCoverage
-        + w_determinism × Determinism
-        + w_residual    × ResidualExplained
-        + w_roles       × RoleConsistency
+  score = w_precision    × PosteriorPrecision
+        + w_determinism  × Determinism
+        + w_residual     × ResidualExplained
+        + w_roles        × RoleConsistency
         − LatentPenalty
 
   clamped to [0.0, 1.0]
@@ -75,7 +75,7 @@ type ConfidenceReport struct {
 // ConfidenceComponents breaks down the score into its constituent signals.
 // All fields are in [0.0, 1.0] before weighting and penalty application.
 type ConfidenceComponents struct {
-	GraphCoverage     float64 // fraction of graph covered by identified causal paths
+	PosteriorPrecision float64 // 1.0 minus the max Bayesian variance ratio
 	Determinism       float64 // 1.0 minus rank instability (from LatentRiskReport)
 	ResidualExplained float64 // fraction of effect magnitude reachable via DAG
 	RoleConsistency   float64 // fraction of fusion actors corroborated by explanation
@@ -108,9 +108,9 @@ const (
 Component weights — sum exactly to 1.0 for linear score interpretability.
 
 Weight distribution rationale:
-  GraphCoverage (0.30): Primary structural evidence — the fraction of the graph
-    model that is explained by identified paths. High weight because coverage
-    collapse is the most reliable indicator of model inadequacy.
+  PosteriorPrecision (0.30): Primary structural evidence — the inverse of the maximum
+    posterior variance ratio. High weight because variance directly indicates
+    unmeasured confounders and poor causal identifiability.
   ResidualExplained (0.30): Primary effect evidence — fraction of observed
     causal signal accounted for by the DAG. Co-equal with coverage because it
     measures explanatory power rather than structural completeness.
@@ -121,7 +121,7 @@ Weight distribution rationale:
     completely dominating the score. A stable wrong answer is still wrong.
 */
 const (
-	wGraphCoverage    = 0.30
+	wPosteriorPrecision = 0.30
 	wDeterminism      = 0.20
 	wResidualExplained = 0.30
 	wRoleConsistency  = 0.20
@@ -163,10 +163,9 @@ func ComputeConfidence(
 ) ConfidenceReport {
 	comps := ConfidenceComponents{}
 
-	// Component 1: Graph coverage — already computed by latent guard.
-	// Clamped defensively; latent guard guarantees [0,1] but callers may
-	// construct LatentRiskReport directly in tests.
-	comps.GraphCoverage = math.Max(0.0, math.Min(1.0, latent.GraphCoverage))
+	// Component 1: Posterior Precision = 1.0 - PosteriorVariance
+	// Latent guard computes variance ratio (lower is better); precision is its complement.
+	comps.PosteriorPrecision = math.Max(0.0, math.Min(1.0, 1.0-latent.PosteriorVariance))
 
 	// Component 2: Determinism = 1 − instability.
 	// Instability = 0 → Determinism = 1.0 (perfectly stable)
@@ -191,7 +190,7 @@ func ComputeConfidence(
 	}
 
 	// Linear score composition.
-	raw := wGraphCoverage*comps.GraphCoverage +
+	raw := wPosteriorPrecision*comps.PosteriorPrecision +
 		wDeterminism*comps.Determinism +
 		wResidualExplained*comps.ResidualExplained +
 		wRoleConsistency*comps.RoleConsistency -
