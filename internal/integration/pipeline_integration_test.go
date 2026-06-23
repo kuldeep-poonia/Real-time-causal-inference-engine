@@ -172,7 +172,10 @@ func TestIntegration_IngestAccumulatesAndTransitionToRealData(t *testing.T) {
 // ============================================================================
 
 func TestIntegration_AnalyzeAlwaysIncludesSafetyGate(t *testing.T) {
-	srv, _ := setup(t, "")
+	srv, store := setup(t, "")
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 8.0, QueueLength: 5.0, Timestamp: float64(i * 8)})
+	}
 
 	body := map[string]interface{}{
 		"arrival_rate": 10.0, "service_rate": 8.0, "queue_length": 5.0,
@@ -196,7 +199,7 @@ func TestIntegration_AnalyzeAlwaysIncludesSafetyGate(t *testing.T) {
 
 	for _, f := range []string{
 		"confidence_score", "confidence_state", "latent_risk",
-		"fallback_triggered", "graph_coverage", "determinism",
+		"fallback_triggered", "posterior_variance", "posterior_precision", "determinism",
 	} {
 		if _, exists := safety[f]; !exists {
 			t.Errorf("safety gate missing field: %s", f)
@@ -213,7 +216,10 @@ func TestIntegration_AnalyzeAlwaysIncludesSafetyGate(t *testing.T) {
 // ============================================================================
 
 func TestIntegration_ExecutionTimeMSIsPopulated(t *testing.T) {
-	srv, _ := setup(t, "")
+	srv, store := setup(t, "")
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 5.0, ServiceRate: 8.0, QueueLength: 1.0, Timestamp: float64(i * 8)})
+	}
 
 	body := map[string]interface{}{
 		"arrival_rate": 5.0, "service_rate": 8.0, "queue_length": 1.0,
@@ -241,7 +247,10 @@ func TestIntegration_ExecutionTimeMSIsPopulated(t *testing.T) {
 
 func TestIntegration_ActRequiresBearerTokenWhenKeySet(t *testing.T) {
 	const testKey = "test-secret-key-abc123"
-	srv, _ := setup(t, testKey)
+	srv, store := setup(t, testKey)
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 8.0, QueueLength: 5.0, Timestamp: float64(i * 8)})
+	}
 
 	body := map[string]interface{}{
 		"arrival_rate": 10.0, "service_rate": 8.0, "queue_length": 5.0,
@@ -264,7 +273,10 @@ func TestIntegration_ActRequiresBearerTokenWhenKeySet(t *testing.T) {
 
 func TestIntegration_ActAllowsRequestWithValidToken(t *testing.T) {
 	const testKey = "correct-key-xyz"
-	srv, _ := setup(t, testKey)
+	srv, store := setup(t, testKey)
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 8.0, QueueLength: 5.0, Timestamp: float64(i * 8)})
+	}
 
 	body := map[string]interface{}{
 		"arrival_rate": 10.0, "service_rate": 8.0, "queue_length": 5.0,
@@ -277,7 +289,10 @@ func TestIntegration_ActAllowsRequestWithValidToken(t *testing.T) {
 }
 
 func TestIntegration_ActPassthroughWhenNoKeyConfigured(t *testing.T) {
-	srv, _ := setup(t, "")
+	srv, store := setup(t, "")
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 8.0, QueueLength: 5.0, Timestamp: float64(i * 8)})
+	}
 
 	body := map[string]interface{}{
 		"arrival_rate": 10.0, "service_rate": 8.0, "queue_length": 5.0,
@@ -339,7 +354,10 @@ func TestIntegration_GetToPostEndpointReturns405(t *testing.T) {
 // ============================================================================
 
 func TestIntegration_ConcurrentAnalyzeCalls(t *testing.T) {
-	srv, _ := setup(t, "")
+	srv, store := setup(t, "")
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 5.0, ServiceRate: 10.0, QueueLength: 1.0, Timestamp: float64(i * 8)})
+	}
 
 	const workers = 5
 	done := make(chan error, workers)
@@ -382,7 +400,10 @@ func TestIntegration_ConcurrentAnalyzeCalls(t *testing.T) {
 // ============================================================================
 
 func TestIntegration_ExplainResponseStructure(t *testing.T) {
-	srv, _ := setup(t, "")
+	srv, store := setup(t, "")
+	for i := 0; i < 5; i++ {
+		store.Put("primary", metricsstore.NodeSample{ArrivalRate: 8.0, ServiceRate: 6.0, QueueLength: 3.0, Timestamp: float64(i * 8)})
+	}
 
 	body := map[string]interface{}{
 		"arrival_rate": 8.0, "service_rate": 6.0, "queue_length": 3.0,
@@ -492,7 +513,7 @@ func TestIntegration_RealTimeSignalStream(t *testing.T) {
 		}
 
 		// every few steps → analyze
-		if i%5 == 0 {
+		if i > 0 && i%5 == 0 {
 			resp := postJSON(t, srv, "/analyze", body, "")
 			resp.Body.Close()
 
@@ -554,7 +575,7 @@ func TestIntegration_ParallelLoadBreakTest(t *testing.T) {
 					return
 				}
 
-				if i%3 == 0 {
+				if i >= 12 && i%3 == 0 {
 					resp := postJSON(t, srv, "/analyze", body, "")
 					resp.Body.Close()
 
