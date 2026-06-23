@@ -1,6 +1,6 @@
 {
   "test_suite": "T07_ConcurrentStress",
-  "timestamp_utc": "2026-06-03T07:53:48Z",
+  "timestamp_utc": "2026-06-23T12:31:46Z",
   "concurrent_batches": [
     {
       "batch_name": "light_load_4_workers",
@@ -219,8 +219,8 @@
       "safety_nil_count": 0,
       "nan_or_inf_scores": 0,
       "scores_out_of_0_1": 0,
-      "avg_exec_time_ms": 0,
-      "max_exec_time_ms": 0,
+      "avg_exec_time_ms": 0.0716125,
+      "max_exec_time_ms": 0.5729,
       "per_worker_results": [
         {
           "worker_id": 0,
@@ -233,7 +233,7 @@
           "score_in_0_1": false,
           "confidence_score": 0,
           "confidence_state": "",
-          "exec_time_ms": 0,
+          "exec_time_ms": 0.5729,
           "data_source": "",
           "no_panic": true
         },
@@ -293,7 +293,7 @@
           "score_in_0_1": false,
           "confidence_score": 0,
           "confidence_state": "",
-          "exec_time_ms": 0,
+          "exec_time_ms": 0.5729,
           "data_source": "",
           "no_panic": true
         },
@@ -698,7 +698,7 @@
     "total_nan_inf_scores": 0,
     "total_out_of_bound_scores": 0,
     "ranking_isolation_holds": true,
-    "max_batch_exec_time_ms": 0.516,
+    "max_batch_exec_time_ms": 0.5729,
     "overall_verdict": "PASS"
   }
 }
