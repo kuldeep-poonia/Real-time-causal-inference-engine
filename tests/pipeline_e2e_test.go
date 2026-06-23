@@ -116,8 +116,17 @@ func TestFullPipelineE2E(t *testing.T) {
 	rhoCorrect := 0
 	totalExec := 0.0
 
-	store := metricsstore.New(4)
 	for _, rc := range runCases {
+		store := metricsstore.New(4)
+		for i := 0; i < 5; i++ {
+			store.Put("test-node", metricsstore.NodeSample{
+				ArrivalRate: rc.lambda,
+				ServiceRate: rc.mu,
+				QueueLength: rc.q,
+				Timestamp:   float64(i * 8),
+				WallTime:    time.Now().Add(time.Duration(i*8) * time.Second),
+			})
+		}
 		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
 		if err != nil {
 			t.Errorf("pipeline error [%s] (expected success): %v", rc.name, err)
@@ -249,6 +258,16 @@ func TestFullPipelineE2E(t *testing.T) {
 
 	inputGuardsPass := true
 	for _, gc := range guardCases {
+		store := metricsstore.New(4)
+		for i := 0; i < 5; i++ {
+			store.Put("test-node", metricsstore.NodeSample{
+				ArrivalRate: gc.lambda,
+				ServiceRate: gc.mu,
+				QueueLength: gc.q,
+				Timestamp:   float64(i * 8),
+				WallTime:    time.Now().Add(time.Duration(i*8) * time.Second),
+			})
+		}
 		_, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
 		didErr := err != nil
 		correct := didErr == gc.expectErr
@@ -279,6 +298,16 @@ func TestFullPipelineE2E(t *testing.T) {
 	}
 
 	for _, sc := range safetyContractCases {
+		store := metricsstore.New(4)
+		for i := 0; i < 5; i++ {
+			store.Put("test-node", metricsstore.NodeSample{
+				ArrivalRate: sc.lambda,
+				ServiceRate: sc.mu,
+				QueueLength: sc.q,
+				Timestamp:   float64(i * 8),
+				WallTime:    time.Now().Add(time.Duration(i*8) * time.Second),
+			})
+		}
 		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
 		if err != nil || res == nil {
 			report.SafetyContract = append(report.SafetyContract, SafetyContractCase{
