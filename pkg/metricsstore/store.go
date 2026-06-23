@@ -93,6 +93,21 @@ func (s *Store) GetLatestSample(nodeID string) (NodeSample, bool) {
 	return samples[len(samples)-1], true
 }
 
+// GetSamples returns a copy of all retained samples for nodeID.
+// The copy lets pipeline validation inspect real data without holding the
+// store lock or allowing callers to mutate internal slices.
+func (s *Store) GetSamples(nodeID string) []NodeSample {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	samples := s.nodes[nodeID]
+	if len(samples) == 0 {
+		return nil
+	}
+	out := make([]NodeSample, len(samples))
+	copy(out, samples)
+	return out
+}
+
 // GetAllNodeIDs returns all known node IDs in deterministic sorted order.
 func (s *Store) GetAllNodeIDs() []string {
 	s.mu.RLock()
