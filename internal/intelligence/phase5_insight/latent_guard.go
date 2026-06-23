@@ -14,7 +14,7 @@ a latent (unobserved) variable confounds the current root-cause assignment:
   Channel 1 — Correlation-Without-Path   (HIGH-severity)
   Channel 2 — Unexplained Residual       (MEDIUM-severity)
   Channel 3 — Ranking Instability        (HIGH-severity)
-  Channel 4 — Graph Coverage Collapse    (MEDIUM-severity)
+  Channel 4 — High Posterior Variance    (MEDIUM-severity)
 
 Risk composition (after signal assignment):
   ≥1 HIGH signal          → LatentRiskHigh
@@ -60,7 +60,7 @@ const (
 	SignalCorrelationNoPath  LatentSignal = 1 << 0 // effect observed, no DAG path to target
 	SignalUnexplainedResidual LatentSignal = 1 << 1 // effect mass exceeds explained coverage
 	SignalRankingInstability LatentSignal = 1 << 2 // cause rank order diverged from prior
-	SignalCoverageCollapse   LatentSignal = 1 << 3 // graph path coverage below safe floor
+	SignalHighPosteriorVariance LatentSignal = 1 << 3 // Bayesian variance exceeds dynamic SNR threshold
 )
 
 // LatentRiskReport is the complete structured output of the latent guard.
@@ -72,7 +72,7 @@ type LatentRiskReport struct {
 	CorrelationScore float64  // max normalized spurious effect seen [0,1]
 	ResidualRatio    float64  // fraction of effect mass with a DAG path [0,1]
 	RankInstability  float64  // Spearman divergence from prior ranking [0,1]
-	GraphCoverage    float64  // fraction of graph nodes on any causal path [0,1]
+	PosteriorVariance float64 // max Bayesian variance relative to SNR among root causes
 	SuspiciousNodes  []string // deterministically sorted list of flagged node IDs
 }
 
@@ -108,13 +108,14 @@ const (
 	// for production systems where ranking errors propagate to remediation.
 	latentInstabilityThreshold = 0.30
 
-	// latentCoverageThreshold: 0.50
-	// If fewer than half of the observable graph nodes lie on any identified
-	// causal path, the graph model is under-specified relative to the observed
-	// system. Pearl (2009, §2.3) identifies incomplete-model bias as a primary
-	// source of latent confounder confusability; 0.50 is the minimum coverage
-	// required for the model to represent the majority of the system's topology.
-	latentCoverageThreshold = 0.50
+	// latentVarianceSNRThreshold: 0.25
+	// Rather than using a static graph coverage heuristic, we use a dynamic
+	// Bayesian threshold based on Signal-to-Noise Ratio (SNR).
+	// If the posterior variance exceeds (Effect / 2)^2, the 95% credible
+	// interval crosses zero, indicating the causal effect is indistinguishable
+	// from noise (implying unmeasured confounders).
+	// Threshold = 0.25 * (Effect)^2
+	latentVarianceSNRThreshold = 0.25
 )
 
 // AssessLatentRisk is the single entry point for the latent guard.
@@ -137,11 +138,11 @@ func AssessLatentRisk(
 	if graph == nil || len(graph.Nodes) == 0 {
 		return LatentRiskReport{
 			Level:            LatentRiskHigh,
-			Signals:          SignalCoverageCollapse,
+			Signals:          SignalHighPosteriorVariance,
 			CorrelationScore: 0.0,
 			ResidualRatio:    0.0,
 			RankInstability:  0.0,
-			GraphCoverage:    0.0,
+			PosteriorVariance: 1.0,
 			SuspiciousNodes:  []string{},
 		}
 	}
@@ -151,14 +152,14 @@ func AssessLatentRisk(
 	corrScore, suspNodes := lgCorrNoPathScore(graph, exp, target)
 	residualRatio := lgResidualRatio(graph, exp, target)
 	rankInstab := lgRankInstability(exp.Causes, prevRanking)
-	graphCov := lgGraphCoverage(graph, exp.Causes, target)
+	maxVarRatio := lgMaxPosteriorVariance(exp)
 
 	report := LatentRiskReport{
 		Signals:          SignalNone,
 		CorrelationScore: corrScore,
 		ResidualRatio:    residualRatio,
 		RankInstability:  rankInstab,
-		GraphCoverage:    graphCov,
+		PosteriorVariance: maxVarRatio,
 		SuspiciousNodes:  suspNodes,
 	}
 
@@ -171,8 +172,8 @@ func AssessLatentRisk(
 	if rankInstab > latentInstabilityThreshold {
 		report.Signals |= SignalRankingInstability
 	}
-	if graphCov < latentCoverageThreshold {
-		report.Signals |= SignalCoverageCollapse
+	if maxVarRatio > latentVarianceSNRThreshold {
+		report.Signals |= SignalHighPosteriorVariance
 	}
 
 	// Signal severity classification:
@@ -194,7 +195,7 @@ func AssessLatentRisk(
 	if report.Signals&SignalUnexplainedResidual != 0 {
 		medCount++
 	}
-	if report.Signals&SignalCoverageCollapse != 0 {
+	if report.Signals&SignalHighPosteriorVariance != 0 {
 		medCount++
 	}
 
@@ -366,64 +367,24 @@ func lgRankInstability(current, prev []string) float64 {
 	return math.Max(0.0, math.Min(1.0, instability))
 }
 
-// lgGraphCoverage computes the fraction of graph nodes lying on at least one
-// directed simple path from any identified cause to the target.
-//
-//	coverage = |{ v ∈ graph.Nodes : ∃ cause c, path c→v→…→target }| / |graph.Nodes|
-//
-// Low coverage indicates that the graph model is sparse relative to the
-// observable system, a primary precondition for latent-variable bias.
-func lgGraphCoverage(graph *CausalGraph, causes []string, target string) float64 {
-	if graph == nil || len(graph.Nodes) == 0 {
-		return 0.0
+// lgMaxPosteriorVariance computes the maximum Bayesian variance-to-squared-effect
+// ratio among all identified causes. A high ratio indicates that the posterior
+// distribution of the causal effect overlaps with zero, implying that the effect
+// is statistically indistinguishable from background noise, often caused by
+// unmeasured latent confounders injecting variance into the causal link.
+func lgMaxPosteriorVariance(exp Explanation) float64 {
+	maxRatio := 0.0
+	for _, cause := range exp.Causes {
+		effect := exp.Effects[cause]
+		variance := exp.Uncertainty[cause]
+		if effect == 0 {
+			continue
+		}
+		// Calculate variance relative to squared effect (SNR metric)
+		ratio := variance / (effect * effect)
+		if ratio > maxRatio {
+			maxRatio = ratio
+		}
 	}
-
-	onPath := make(map[string]bool)
-	for _, cause := range causes {
-		lgMarkOnPath(graph, cause, target, onPath)
-	}
-
-	return float64(len(onPath)) / float64(len(graph.Nodes))
-}
-
-// lgMarkOnPath uses backtracking DFS to mark every node that lies on any
-// simple directed path from src to dst.
-//
-// The backtracking (stack deletion on return) is essential: without it, a node
-// visited on a dead-end branch would be incorrectly excluded from live-path
-// branches that happen to traverse it later.
-//
-// Nodes already in onPath short-circuit: once reachability is confirmed,
-// all ancestor branches that pass through them are also confirmed.
-func lgMarkOnPath(graph *CausalGraph, src, dst string, onPath map[string]bool) {
-	var dfs func(curr string, stack map[string]bool) bool
-	dfs = func(curr string, stack map[string]bool) bool {
-		if curr == dst {
-			onPath[curr] = true
-			return true
-		}
-		if stack[curr] {
-			return false
-		}
-		// Early exit: already confirmed on-path in a prior cause's traversal.
-		if onPath[curr] {
-			return true
-		}
-		stack[curr] = true
-
-		anyReach := false
-		for _, e := range graph.Edges {
-			if e.From != nil && e.From.ID == curr && e.To != nil {
-				if dfs(e.To.ID, stack) {
-					anyReach = true
-				}
-			}
-		}
-		if anyReach {
-			onPath[curr] = true
-		}
-		delete(stack, curr) // backtrack to allow alternative paths through curr
-		return anyReach
-	}
-	dfs(src, make(map[string]bool))
+	return maxRatio
 }
