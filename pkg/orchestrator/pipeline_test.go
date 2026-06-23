@@ -72,6 +72,7 @@ func newTestRng(seed int64) func() float64 {
 
 func TestPipelineRejectsZeroServiceRate(t *testing.T) {
 	store := buildTestStore(10.0, 42)
+	store.Put("A", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 0.0, QueueLength: 1.0, Timestamp: 100})
 	_, err := ExecuteFullPipelineFromStore("A", store)
 	if err == nil {
 		t.Error("expected error for serviceRate=0, got nil")
@@ -80,6 +81,7 @@ func TestPipelineRejectsZeroServiceRate(t *testing.T) {
 
 func TestPipelineRejectsNegativeServiceRate(t *testing.T) {
 	store := buildTestStore(5.0, 42)
+	store.Put("A", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: -1.0, QueueLength: 1.0, Timestamp: 100})
 	_, err := ExecuteFullPipelineFromStore("A", store)
 	if err == nil {
 		t.Error("expected error for serviceRate=-1, got nil")
@@ -88,6 +90,7 @@ func TestPipelineRejectsNegativeServiceRate(t *testing.T) {
 
 func TestPipelineRejectsNegativeArrivalRate(t *testing.T) {
 	store := buildTestStore(5.0, 42)
+	store.Put("A", metricsstore.NodeSample{ArrivalRate: -1.0, ServiceRate: 10.0, QueueLength: 1.0, Timestamp: 100})
 	_, err := ExecuteFullPipelineFromStore("A", store)
 	if err == nil {
 		t.Error("expected error for arrivalRate=-1, got nil")
