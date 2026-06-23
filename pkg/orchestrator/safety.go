@@ -47,7 +47,7 @@ func RunSafetyGate(
 	latent := phase5.AssessLatentRisk(graph, exp, prevRanking, target)
 
 	// Step 3: Compute calibrated confidence score with latent penalty.
-	// Score = weighted(GraphCoverage, Determinism, ResidualExplained, RoleConsistency) − LatentPenalty
+	// Score = weighted(PosteriorPrecision, Determinism, ResidualExplained, RoleConsistency) − LatentPenalty
 	confidence := phase5.ComputeConfidence(fusion, graph, exp, latent)
 
 	// Step 4: Evaluate five-gate safety decision.
