@@ -17,6 +17,9 @@ type NodeState struct {
 	ProcessingDelay float64 // W  (seconds)
 	Timestamp       float64 // last observation time
 
+	ArrivalCV2      float64 // C_A^2 (Arrival Coefficient of Variation Squared)
+	ServiceCV2      float64 // C_S^2 (Service Coefficient of Variation Squared)
+
 	SignalIntensity float64
 }
 
@@ -344,8 +347,9 @@ func (p *Processor) GetNodeState() NodeState {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// λ
+	// λ and C_A^2
 	lambda := 0.0
+	arrivalCV2 := 1.0 // default M/M/1 assumption
 	if len(p.recentInterArrivals) > 0 {
 		var s float64
 		for _, t := range p.recentInterArrivals {
@@ -353,32 +357,73 @@ func (p *Processor) GetNodeState() NodeState {
 		}
 		meanIA := s / float64(len(p.recentInterArrivals))
 		if meanIA > 1e-6 {
-	lambda = 1.0 / meanIA
-} else {
-	lambda = 0
-}
+			lambda = 1.0 / meanIA
+
+			// Calculate true variance of inter-arrival times
+			var varSum float64
+			for _, t := range p.recentInterArrivals {
+				diff := t - meanIA
+				varSum += diff * diff
+			}
+			iaVar := varSum / float64(len(p.recentInterArrivals))
+			arrivalCV2 = iaVar / (meanIA * meanIA) // C_A^2 formula
+		} else {
+			lambda = 0
+		}
 	}
 
-	// μ
-// μ = effective service rate (based on stability of output)
-
-// μ = effective service rate (variance-based stability)
-
+// μ = effective service rate and C_S^2
 mu := 1.0
+serviceCV2 := 1.0 // default M/M/1 assumption
 
 if len(p.matrix.Derivatives) > 0 {
 	var totalVar float64
+	var meanSum float64
 	var count float64
 
 	for _, dvec := range p.matrix.Derivatives {
 		for _, d := range dvec {
 			totalVar += d * d
+			meanSum += d
 			count++
 		}
 	}
 
 	if count > 0 {
 		variance := totalVar / count
+		meanD := meanSum / count
+
+		// MATHEMATICAL JUSTIFICATION for ServiceCV2:
+		// We define C_S^2 = Var(S) / (E[S])^2, where S is the true service time per request.
+		// Since we do not observe S directly, we use the first derivative of the macroscopic metric
+		// (e.g., CPU utilization or latency rate of change) as a proxy for the instantaneous workload.
+		//
+		// ASSUMPTIONS:
+		// 1. Ergodicity: The variance of the metric derivative over the time window is proportional 
+		//    to the variance of the underlying service process.
+		// 2. Stationarity: The mean derivative represents the stable-state drift.
+		//
+		// LIMITATIONS:
+		// - If the metric is a gauge (e.g. Memory) rather than a rate, derivatives may exhibit 
+		//   autocorrelation, artificially suppressing the variance estimate.
+		// - Sampling rate (interval) acts as a low-pass filter; high-frequency burstiness shorter 
+		//   than the interval is lost.
+		//
+		// ERROR BOUNDS:
+		// - The estimate is highly sensitive to denominator noise when the mean drift approaches 0.
+		//   We mitigate this by establishing a lower bound `meanD > 1e-6` and capping `serviceCV2 <= 10.0`.
+		if math.Abs(meanD) > 1e-6 {
+			// Variance calculated above is E[X^2]. We need E[(X - E[X])^2] = E[X^2] - E[X]^2
+			trueVar := variance - (meanD * meanD)
+			if trueVar < 0 { trueVar = 0 }
+			serviceCV2 = trueVar / (meanD * meanD)
+		} else {
+			// If mean derivative is ~0, fallback to normalized variance + 1
+			serviceCV2 = 1.0 + variance
+		}
+
+		// Cap extreme burstiness measurements to prevent numerical explosion
+		if serviceCV2 > 10.0 { serviceCV2 = 10.0 }
 
 		// inverse relation: high variance → low capacity
 		mu = 1.0 / (1.0 + variance)
@@ -436,6 +481,9 @@ if len(p.matrix.Derivatives) > 0 {
 		QueueLength:     queueLen,
 		ProcessingDelay: delay,
 		Timestamp:       ts,
+
+		ArrivalCV2:      arrivalCV2,
+		ServiceCV2:      serviceCV2,
 
 		SignalIntensity: p.lastIntensity,
 	}
