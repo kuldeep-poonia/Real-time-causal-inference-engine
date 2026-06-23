@@ -1,4 +1,4 @@
-package tests
+﻿package tests
 
 import (
 	"encoding/json"
@@ -29,7 +29,7 @@ type LatentRiskCase struct {
 	CorrScore       float64  `json:"correlation_score"`
 	ResidualRatio   float64  `json:"residual_ratio"`
 	RankInstability float64  `json:"rank_instability"`
-	GraphCoverage   float64  `json:"graph_coverage"`
+	PosteriorVariance   float64  `json:"graph_coverage"`
 	SuspiciousNodes []string `json:"suspicious_nodes"`
 }
 
@@ -117,7 +117,7 @@ func decodeSignals(s phase5.LatentSignal) []string {
 	if s&phase5.SignalCorrelationNoPath != 0   { names = append(names, "CORR_NO_PATH") }
 	if s&phase5.SignalUnexplainedResidual != 0  { names = append(names, "UNEXPLAINED_RESIDUAL") }
 	if s&phase5.SignalRankingInstability != 0   { names = append(names, "RANKING_INSTABILITY") }
-	if s&phase5.SignalCoverageCollapse != 0     { names = append(names, "COVERAGE_COLLAPSE") }
+	if s&phase5.SignalHighPosteriorVariance != 0     { names = append(names, "COVERAGE_COLLAPSE") }
 	return names
 }
 
@@ -187,7 +187,7 @@ func TestSafetyGate(t *testing.T) {
 		if ok { latentCorrect++ }
 		if !ok {
 			t.Logf("latent [%s]: expected=%s actual=%s | corr=%.3f res=%.3f inst=%.3f cov=%.3f",
-				tc.name, tc.expect, rep.Level, rep.CorrelationScore, rep.ResidualRatio, rep.RankInstability, rep.GraphCoverage)
+				tc.name, tc.expect, rep.Level, rep.CorrelationScore, rep.ResidualRatio, rep.RankInstability, rep.PosteriorVariance)
 		}
 		susp := rep.SuspiciousNodes
 		if susp == nil { susp = []string{} }
@@ -195,7 +195,7 @@ func TestSafetyGate(t *testing.T) {
 			CaseName: tc.name, ExpectedLevel: tc.expect.String(), ActualLevel: rep.Level.String(),
 			Correct: ok, SignalsFired: decodeSignals(rep.Signals),
 			CorrScore: rep.CorrelationScore, ResidualRatio: rep.ResidualRatio,
-			RankInstability: rep.RankInstability, GraphCoverage: rep.GraphCoverage,
+			RankInstability: rep.RankInstability, PosteriorVariance: rep.PosteriorVariance,
 			SuspiciousNodes: susp,
 		})
 	}
@@ -221,7 +221,7 @@ func TestSafetyGate(t *testing.T) {
 			},
 			phase5.LatentRiskReport{
 				Level: phase5.LatentRiskHigh, Signals: phase5.SignalCorrelationNoPath,
-				GraphCoverage: 0.2, ResidualRatio: 0.1, RankInstability: 0.0,
+				PosteriorVariance: 0.2, ResidualRatio: 0.1, RankInstability: 0.0,
 			},
 			phase5.UnknownState,
 		},
@@ -230,7 +230,7 @@ func TestSafetyGate(t *testing.T) {
 			phase5.FusionResult{},
 			buildChain([]string{"A","B"}, []float64{0.5, 0.5}),
 			phase5.Explanation{Causes: []string{}, Effects: map[string]float64{}, Uncertainty: map[string]float64{}},
-			phase5.LatentRiskReport{Level: phase5.LatentRiskLow, GraphCoverage: 0.8, ResidualRatio: 1.0},
+			phase5.LatentRiskReport{Level: phase5.LatentRiskLow, PosteriorVariance: 0.8, ResidualRatio: 1.0},
 			phase5.UnknownState,
 		},
 		{
@@ -242,8 +242,8 @@ func TestSafetyGate(t *testing.T) {
 				Uncertainty: map[string]float64{},
 			},
 			phase5.LatentRiskReport{
-				Level: phase5.LatentRiskMedium, Signals: phase5.SignalCoverageCollapse,
-				GraphCoverage: 0.6, ResidualRatio: 0.6, RankInstability: 0.0,
+				Level: phase5.LatentRiskMedium, Signals: phase5.SignalHighPosteriorVariance,
+				PosteriorVariance: 0.6, ResidualRatio: 0.6, RankInstability: 0.0,
 			},
 			// Score ≈ 0.3*0.6 + 0.2*1.0 + 0.3*0.6 + 0.2*RC - 0.15 — likely PROBABLE or UNKNOWN
 			phase5.UnknownState,
@@ -269,7 +269,7 @@ func TestSafetyGate(t *testing.T) {
 
 		// Formula check: weighted sum should match score
 		c := conf.Components
-		raw := 0.30*c.GraphCoverage + 0.20*c.Determinism + 0.30*c.ResidualExplained + 0.20*c.RoleConsistency - c.LatentPenalty
+		raw := 0.30*c.PosteriorPrecision + 0.20*c.Determinism + 0.30*c.ResidualExplained + 0.20*c.RoleConsistency - c.LatentPenalty
 		clamped := math.Max(0.0, math.Min(1.0, raw))
 		formulaErr := math.Abs(clamped - conf.Score)
 		if formulaErr > 1e-9 {
@@ -283,7 +283,7 @@ func TestSafetyGate(t *testing.T) {
 			ScoreBounded: scoreBounded, HighLatentForced: highForced,
 			FormulaError: formulaErr,
 			ComponentDetails: map[string]float64{
-				"w_graph_coverage":   c.GraphCoverage,
+				"w_posterior_precision":   c.PosteriorPrecision,
 				"w_determinism":      c.Determinism,
 				"w_residual_expl":    c.ResidualExplained,
 				"w_role_consistency": c.RoleConsistency,
@@ -362,7 +362,7 @@ func TestSafetyGate(t *testing.T) {
 	{
 		g := buildChain([]string{"A","B","C"}, []float64{0.9, 0.9, 0.9})
 		exp := phase5.Explanation{Causes: []string{"A","B"}, Effects: map[string]float64{"A": 1.0, "B": 1.0}, Uncertainty: map[string]float64{}}
-		lat := phase5.LatentRiskReport{Level: phase5.LatentRiskHigh, GraphCoverage: 0.9, ResidualRatio: 0.9}
+		lat := phase5.LatentRiskReport{Level: phase5.LatentRiskHigh, PosteriorVariance: 0.9, ResidualRatio: 0.9}
 		fusion := phase5.FusionResult{RootCauses: []string{"A"}, Mediators: []string{"B"}}
 		conf := phase5.ComputeConfidence(fusion, g, exp, lat)
 		holds := conf.State == phase5.UnknownState
