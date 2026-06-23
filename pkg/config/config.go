@@ -12,7 +12,7 @@ import (
 type Config struct {
 	// PrometheusURL is the base URL of the Prometheus server to poll.
 	// Example: "http://prometheus:9090"
-	// If empty, the pipeline falls back to synthetic data with a logged warning.
+	// If empty, ABSIA waits for samples submitted through /ingest.
 	PrometheusURL string
 
 	// PrometheusQuery is the PromQL expression whose results populate the
@@ -41,7 +41,7 @@ type Config struct {
 	ProcessorAlpha float64
 
 	// APIKey is the bearer token required on sensitive mutation endpoints (/act).
-	// When empty, authentication is disabled (development mode — log a warning).
+	// When empty, authentication is disabled for development mode.
 	// Set via ABSIA_API_KEY environment variable.
 	APIKey string
 
@@ -106,17 +106,17 @@ func Load() Config {
 	}
 
 	return Config{
-		PrometheusURL:       getenv("PROMETHEUS_URL", ""),
-		PrometheusQuery:     query,
-		StepSeconds:         getenvInt("PROMETHEUS_STEP_SECONDS", 15),
-		MinDataPoints:       getenvInt("ABSIA_MIN_DATA_POINTS", 20),
-		ProcessorWindowSize: getenvInt("ABSIA_PROCESSOR_WINDOW", 500),
-		ProcessorAlpha:      getenvFloat("ABSIA_PROCESSOR_ALPHA", 0.1),
-		APIKey:              getenv("ABSIA_API_KEY", ""),
-		PolicyStorePath:     getenv("ABSIA_POLICY_STORE_PATH", "/tmp/absia_policies"),
-		MaxBodyBytes:        getenvInt64("ABSIA_MAX_BODY_BYTES", 1<<20), // 1 MiB
-		Seed:                seed,
-		LogLevel:            getenv("ABSIA_LOG_LEVEL", "info"),
+		PrometheusURL:              getenv("PROMETHEUS_URL", ""),
+		PrometheusQuery:            query,
+		StepSeconds:                getenvInt("PROMETHEUS_STEP_SECONDS", 15),
+		MinDataPoints:              getenvInt("ABSIA_MIN_DATA_POINTS", 20),
+		ProcessorWindowSize:        getenvInt("ABSIA_PROCESSOR_WINDOW", 500),
+		ProcessorAlpha:             getenvFloat("ABSIA_PROCESSOR_ALPHA", 0.1),
+		APIKey:                     getenv("ABSIA_API_KEY", ""),
+		PolicyStorePath:            getenv("ABSIA_POLICY_STORE_PATH", "/tmp/absia_policies"),
+		MaxBodyBytes:               getenvInt64("ABSIA_MAX_BODY_BYTES", 1<<20), // 1 MiB
+		Seed:                       seed,
+		LogLevel:                   getenv("ABSIA_LOG_LEVEL", "info"),
 		ReadTimeoutSeconds:         getenvInt("ABSIA_READ_TIMEOUT_SECONDS", 5),
 		WriteTimeoutSeconds:        getenvInt("ABSIA_WRITE_TIMEOUT_SECONDS", 30),
 		IdleTimeoutSeconds:         getenvInt("ABSIA_IDLE_TIMEOUT_SECONDS", 120),
@@ -127,7 +127,7 @@ func Load() Config {
 }
 
 // HasPrometheus returns true when a Prometheus URL is configured.
-// When false, the pipeline runs in synthetic-data fallback mode.
+// When false, ABSIA relies on data submitted through /ingest.
 func (c Config) HasPrometheus() bool {
 	return c.PrometheusURL != ""
 }
