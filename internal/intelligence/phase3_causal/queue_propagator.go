@@ -2,7 +2,6 @@ package phase3_causal
 
 import (
 	"fmt"
-	"math"
 	"sort"
 )
 
@@ -55,11 +54,14 @@ type QueueHop struct {
 	// Queueing variables at this hop
 	ArrivalRate  float64 // λ_effective (own + upstream spillover)
 	ServiceRate  float64 // μ
-	QueueLength  float64 // L
+	QueueLength  float64 // Primary L (M/M/1)
 	IsOverloaded bool    // λ > μ
 
+	// Model Evaluations (Interface Abstraction)
+	ModelEvaluations map[string]QueueModelResult
+
 	// Propagation accounting
-	GeneratedDelay   float64 // W at this node
+	GeneratedDelay   float64 // Primary W at this node (M/M/1)
 	AccumulatedDelay float64 // sum of W from root to here
 	HopCount         int
 	CausalStrength   float64 // strength after decay
@@ -176,18 +178,17 @@ func PropagateQueueLoad(
 		//   Unstable (λ ≥ μ): L grows at rate (λ-μ)·t per hop
 		//                     W = L/μ  (service-rate limited)
 		var queueLen, generatedDelay float64
+		evaluations := make(map[string]QueueModelResult)
 
-		rho := lambdaEff / mu
-		if isOverloaded {
-			// Each hop adds (λ-μ) × 1 unit of queue per time unit.
-			// f.hopCount is the depth — deeper nodes accumulate more.
-			overflow := lambdaEff - mu
-			queueLen = overflow * math.Max(1, float64(f.hopCount+1))
-			generatedDelay = queueLen / mu
-		} else if rho > 0 {
-			queueLen = rho / (1.0 - rho)
-			if lambdaEff > 1e-9 {
-				generatedDelay = queueLen / lambdaEff
+		// Evaluate all registered queue models
+		for _, model := range RegisteredQueueModels {
+			res := model.Calculate(lambdaEff, mu, isOverloaded, f.hopCount, state)
+			evaluations[model.Name()] = res
+
+			// Preserve M/M/1 as the primary model for backward compatibility
+			if model.Name() == "M/M/1" {
+				queueLen = res.QueueLength
+				generatedDelay = res.Delay
 			}
 		}
 
@@ -205,6 +206,7 @@ func PropagateQueueLoad(
 			ServiceRate:      mu,
 			QueueLength:      queueLen,
 			IsOverloaded:     isOverloaded,
+			ModelEvaluations: evaluations,
 			GeneratedDelay:   generatedDelay,
 			AccumulatedDelay: accDelay,
 			HopCount:         f.hopCount,
@@ -377,9 +379,24 @@ func buildPhysicsExplanation(nodeID string, state NodeState, chain *PropagationC
 			state.QueueLength, chain.TotalDelay, len(chain.Hops),
 		)
 	}
+
+	// For stable nodes, we compare M/M/1 to G/G/1
+	var lastHop QueueHop
+	if len(chain.Hops) > 0 {
+		lastHop = chain.Hops[len(chain.Hops)-1]
+	}
+
+	// Indicate burst discrepancy if Kingman delay is significantly larger
+	burstStr := ""
+	if kingmanRes, ok := lastHop.ModelEvaluations["G/G/1 (Kingman)"]; ok {
+		if kingmanRes.Delay > lastHop.GeneratedDelay*1.2 && !lastHop.IsOverloaded {
+			burstStr = fmt.Sprintf(" [BURST-AWARE G/G/1: W=%.3fs L=%.2f]", kingmanRes.Delay, kingmanRes.QueueLength)
+		}
+	}
+
 	return fmt.Sprintf(
-		"ORIGIN: %s — load ρ=%.2f (stable) → contributed delay W=%.3fs over %d hops",
-		nodeID, state.Load, chain.TotalDelay, len(chain.Hops),
+		"ORIGIN: %s — load ρ=%.2f (stable) → contributed delay W=%.3fs%s over %d hops",
+		nodeID, state.Load, chain.TotalDelay, burstStr, len(chain.Hops),
 	)
 }
 
