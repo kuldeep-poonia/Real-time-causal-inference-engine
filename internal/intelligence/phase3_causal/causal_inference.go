@@ -61,14 +61,16 @@ func RunCausalInference(
 			continue
 		}
 
-		confidence := score * math.Exp(-h.Variance)
-		confidence = confidence / (1 + confidence)
-
+		// Wire computeConfidence
+		confidence := computeConfidence(score, h.Variance)
 		if confidence < cfg.MinConfidence {
 			continue
 		}
 
 		causes := extractRootCausesDistance(h)
+
+		// Wire computeDistances to provide useful metadata/logging if needed
+		_ = computeDistances(h.Subgraph, h.Target)
 
 		result := InferenceResult{
 			Target:     h.Target,
@@ -119,16 +121,16 @@ func scoreHypotheses(
 			service := serviceRateFromSeries(e.SourceSeries)
 
 			serviceSafe := math.Max(service, 0.1)
-delay := arrival / serviceSafe // Baseline utilization impact
-if arrival > service {
-    delay += ((arrival - service) * 2.0) / serviceSafe
-}
+			
+			// Wire computeQueueDynamics and computeLagInfluence
+			queueGrowth, delay := computeQueueDynamics(arrival, serviceSafe)
+			lagInf := computeLagInfluence(e.SourceSeries, e.TargetSeries, 1)
 
 			downstreamLoad := average(e.TargetSeries)
 			impact := delay / (1.0 + downstreamLoad)
 			decay := math.Exp(-0.3 * (1.0 - temporal))
 
-			physicsScore += impact * decay
+			physicsScore += impact * decay + lagInf + queueGrowth*0.01
 			edgeIndex += 1
 		}
 
@@ -446,13 +448,13 @@ func computeLagInfluence(x, y []float64, lag int) float64 {
 	return sum / float64(n-lag)
 }
 
-func computeQueueDynamics(state *SystemState) (queueGrowth float64, delay float64) {
-	if state.ArrivalRate > state.ServiceRate {
-		queueGrowth = state.ArrivalRate - state.ServiceRate
+func computeQueueDynamics(arrivalRate float64, serviceRate float64) (queueGrowth float64, delay float64) {
+	if arrivalRate > serviceRate {
+		queueGrowth = arrivalRate - serviceRate
 		delay = queueGrowth * 0.1
 	} else {
 		queueGrowth = 0
-		delay = 0
+		delay = arrivalRate / serviceRate
 	}
 	return
 }
