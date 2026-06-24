@@ -44,6 +44,9 @@ func ConvertPhase3ResultToPhase4Graph(
 
 	// Convert nodes
 	for nodeID, node := range graph.Nodes {
+		variance := calculateVariance(node.Series)
+		scmFunc := SelectSCMFunc(variance)
+
 		cg.Nodes[nodeID] = &phase4.CausalNode{
 			ID:        nodeID,
 			Value:     node.State.Load, // Use ρ = λ/μ as node value
@@ -51,14 +54,7 @@ func ConvertPhase3ResultToPhase4Graph(
 			Lags:      make([]int, 0),
 			Timestamp: int(node.State.Timestamp),
 			Noise:     0.0,
-			Func: func(inputs []float64, noise float64) float64 {
-				// Default function: weighted sum + noise
-				sum := 0.0
-				for _, inp := range inputs {
-					sum += inp
-				}
-				return sum + noise
-			},
+			Func:      func(inputs []float64, noise float64) float64 { return scmFunc(inputs, noise) },
 		}
 	}
 
@@ -204,6 +200,9 @@ func ConvertPhase4GraphToPhase5Graph(
 	// Convert nodes
 	nodeMap := make(map[string]*phase5.CausalNode)
 	for nodeID, p4Node := range p4Graph.Nodes {
+		// p4Node doesn't have the original Series, so we estimate variance from noise or fallback to linear
+		scmFunc := SelectSCMFunc(p4Node.Noise) // Use noise as a proxy for variance here
+		
 		p5Node := &phase5.CausalNode{
 			ID:        p4Node.ID,
 			Value:     p4Node.Value,
@@ -211,13 +210,7 @@ func ConvertPhase4GraphToPhase5Graph(
 			Noise:     p4Node.Noise,
 			Parents:   make([]*phase5.CausalNode, 0),
 			Lags:      make([]int, 0),
-			Func: func(inputs []float64, noise float64) float64 {
-				sum := 0.0
-				for _, inp := range inputs {
-					sum += inp
-				}
-				return sum + noise
-			},
+			Func:      func(inputs []float64, noise float64) float64 { return scmFunc(inputs, noise) },
 		}
 		nodeMap[nodeID] = p5Node
 		p5Graph.Nodes[nodeID] = p5Node
@@ -362,4 +355,23 @@ func ValidateConversionPhase4ToPhase5(belief phase5.BeliefState) error {
 		return fmt.Errorf("Phase 5 belief state has no variance values")
 	}
 	return nil
+}
+
+// calculateVariance is a helper to compute the variance of a slice.
+func calculateVariance(data []float64) float64 {
+	if len(data) < 2 {
+		return 0.0
+	}
+	sum := 0.0
+	for _, v := range data {
+		sum += v
+	}
+	mean := sum / float64(len(data))
+	
+	sqSum := 0.0
+	for _, v := range data {
+		diff := v - mean
+		sqSum += diff * diff
+	}
+	return sqSum / float64(len(data)-1)
 }
