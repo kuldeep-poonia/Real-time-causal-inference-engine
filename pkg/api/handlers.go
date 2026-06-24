@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"math"
 	"net"
@@ -965,9 +966,11 @@ func selectPolicyActions(result *orchestrator.PipelineResult) []map[string]inter
 	return out
 }
 
-//go:embed ui/absia.html
+//go:embed ui/*
 var embeddedUIFS embed.FS
 
+// toPhase5Exp safely converts Phase 4 Explanation to Phase 5 format.
+// Required because the SCM and belief engine operate strictly in Phase 5 types.
 func toPhase5Exp(e *phase4.Explanation) phase5.Explanation {
 	if e == nil {
 		return phase5.Explanation{
@@ -983,24 +986,17 @@ func toPhase5Exp(e *phase4.Explanation) phase5.Explanation {
 	}
 }
 
+// UIHandler serves the static UI files from the embedded filesystem.
 func UIHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
-			http.NotFound(w, r)
-			return
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data, err := embeddedUIFS.ReadFile("ui/absia.html")
-		if err != nil {
-			baseLog().Error("failed to read embedded UI asset", slog.Any("error", err))
+	// Strip the "ui/" prefix from the embedded FS
+	uiFS, err := fs.Sub(embeddedUIFS, "ui")
+	if err != nil {
+		baseLog().Error("failed to create sub filesystem for UI", slog.Any("error", err))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		if _, err := w.Write(data); err != nil {
-			baseLog().Error("failed to write UI response", slog.Any("error", err))
-		}
-	})
+		})
+	}
+	return http.FileServer(http.FS(uiFS))
 }
 
 // ============================================================================
