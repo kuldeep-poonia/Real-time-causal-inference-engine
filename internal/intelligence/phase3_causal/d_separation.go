@@ -32,7 +32,7 @@ func IsDSeparated(
 	// A collider is activated if it or any of its descendants is conditioned on.
 	condAncestors := allAncestors(graph, conditioned)
 
-	visited := make(map[string]bool)
+	visited := make(map[pathNode]bool)
 
 	return !hasActivePath(graph, X, Y, conditioned, condAncestors, visited, "")
 }
@@ -92,7 +92,7 @@ func hasActivePath(
 	current, target string,
 	conditioned map[string]bool,
 	condAncestors map[string]bool,
-	visited map[string]bool,
+	visited map[pathNode]bool,
 	prev string,
 ) bool {
 
@@ -100,7 +100,7 @@ func hasActivePath(
 		return true
 	}
 
-	key := current + "|" + prev
+	key := pathNode{NodeID: current, From: prev}
 	if visited[key] {
 		return false
 	}
