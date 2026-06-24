@@ -11,21 +11,21 @@ ABSIA is written in pure Go to achieve maximum performance and memory safety. It
 ```mermaid
 graph TD
     subgraph Data Sources
-        A[Docker/Containerd Auto-Discovery]
-        B[HTTP /ingest Endpoint]
+        A["Docker/Containerd Auto-Discovery"]
+        B["HTTP /ingest Endpoint"]
     end
 
     subgraph ABSIA Engine
-        C[pkg/api]
-        D[pkg/orchestrator]
-        E[pkg/bridge (SCM)]
-        F[internal/intelligence]
-        G[pkg/cache (LRU / Redis)]
+        C["pkg/api"]
+        D["pkg/orchestrator"]
+        E["pkg/bridge (SCM)"]
+        F["internal/intelligence"]
+        G["pkg/cache (LRU / Redis)"]
     end
 
     subgraph Outputs
-        H[Apple-Style UI Dashboard]
-        I[Automated Remediation Webhooks]
+        H["Apple-Style UI Dashboard"]
+        I["Automated Remediation Webhooks"]
     end
 
     A -->|Raw Metrics| C
