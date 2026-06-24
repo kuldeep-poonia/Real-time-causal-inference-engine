@@ -17,6 +17,7 @@ import (
 	phase4 "absia/internal/intelligence/phase4_explanation"
 	phase5 "absia/internal/intelligence/phase5_insight"
 	"absia/pkg/autodetect"
+	"absia/pkg/config"
 	"absia/pkg/logger"
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
@@ -45,18 +46,8 @@ No response is returned without safety evaluation.
 // globalStore is injected by SetStore before StartServer is called.
 var globalStore *metricsstore.Store
 
-// globalAPIKey is injected by SetAPIKey. Empty string = auth disabled.
-var globalAPIKey string
-
-// globalMaxBodyBytes is injected by SetMaxBodyBytes. Default 1 MiB.
-var globalMaxBodyBytes int64 = 1 << 20
-
 // globalLog is the base structured logger for all handler logging.
 var globalLog *slog.Logger
-
-// globalGitHubToken is optional; enables GitHub-aware contextual enrichment
-// in the /explore endpoint. Loaded from GITHUB_TOKEN env var.
-var globalGitHubToken string
 
 // globalSemanticsMu guards globalLastSemantics.
 var globalSemanticsMu sync.RWMutex
@@ -70,11 +61,6 @@ var globalLastConfidenceNarrative string
 
 // globalLastIncidentTitle is the current incident title.
 var globalLastIncidentTitle string
-
-// SetGitHubToken injects the optional GitHub PAT for contextual enrichment.
-func SetGitHubToken(token string) {
-	globalGitHubToken = token
-}
 
 func cacheSemantics(sem *orchestrator.FailureSemantics, confNarrative, title string) {
 	globalSemanticsMu.Lock()
@@ -105,38 +91,28 @@ type rateLimiterEntry struct {
 }
 
 var (
-	// globalRLRate is tokens added per second (0 = disabled).
-	globalRLRate float64
-	// globalRLBurst is the maximum token bucket capacity.
-	globalRLBurst float64
-
 	rlMu      sync.Mutex
 	rlBuckets = make(map[string]*rateLimiterEntry)
 )
 
-// SetRateLimit configures the token-bucket parameters.
-// rps=0 disables rate limiting. Must be called before StartServer.
-func SetRateLimit(rps, burst int) {
-	rlMu.Lock()
-	defer rlMu.Unlock()
-	globalRLRate = float64(rps)
-	if burst < 1 {
-		burst = 1
-	}
-	globalRLBurst = float64(burst)
-}
-
 // allowIP returns true when the remote IP is within its rate limit budget.
 // It uses a token-bucket algorithm: each call consumes one token; tokens
-// refill at globalRLRate per second up to globalRLBurst capacity.
-// When globalRLRate == 0 the check always passes (rate limiting disabled).
+// refill at RateLimitRequestsPerSecond up to RateLimitBurst capacity.
+// When RateLimitRequestsPerSecond == 0 the check always passes.
 func allowIP(remoteAddr string) bool {
 	rlMu.Lock()
 	defer rlMu.Unlock()
 
-	if globalRLRate == 0 {
+	cfg := config.Get()
+	if cfg.RateLimitRequestsPerSecond == 0 {
 		return true
 	}
+
+	burst := float64(cfg.RateLimitBurst)
+	if burst < 1 {
+		burst = 1
+	}
+	rate := float64(cfg.RateLimitRequestsPerSecond)
 
 	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
@@ -146,23 +122,23 @@ func allowIP(remoteAddr string) bool {
 	now := time.Now()
 	entry, ok := rlBuckets[ip]
 	if !ok {
-		entry = &rateLimiterEntry{tokens: globalRLBurst, lastSeen: now}
+		entry = &rateLimiterEntry{tokens: burst, lastSeen: now}
 		rlBuckets[ip] = entry
 	}
 
-	// Refill tokens based on elapsed time.
 	elapsed := now.Sub(entry.lastSeen).Seconds()
-	entry.tokens += elapsed * globalRLRate
-	if entry.tokens > globalRLBurst {
-		entry.tokens = globalRLBurst
-	}
 	entry.lastSeen = now
 
-	if entry.tokens < 1 {
-		return false
+	entry.tokens += elapsed * rate
+	if entry.tokens > burst {
+		entry.tokens = burst
 	}
-	entry.tokens--
-	return true
+
+	if entry.tokens >= 1.0 {
+		entry.tokens -= 1.0
+		return true
+	}
+	return false
 }
 
 // startRLCleanup launches a background goroutine that periodically evicts
@@ -204,17 +180,33 @@ func SetStore(s *metricsstore.Store) {
 	globalStore = s
 }
 
-// SetAPIKey configures bearer token authentication for sensitive endpoints.
-// An empty key disables authentication (development mode).
+// SetAPIKey is preserved for backwards compatibility and tests.
 func SetAPIKey(key string) {
-	globalAPIKey = key
+	cfg := config.Get()
+	cfg.APIKey = key
+	config.Set(cfg)
 }
 
-// SetMaxBodyBytes sets the maximum allowed request body size.
-func SetMaxBodyBytes(n int64) {
-	if n > 0 {
-		globalMaxBodyBytes = n
-	}
+// SetMaxBodyBytes is preserved for backwards compatibility and tests.
+func SetMaxBodyBytes(bytes int64) {
+	cfg := config.Get()
+	cfg.MaxBodyBytes = bytes
+	config.Set(cfg)
+}
+
+// SetRateLimit is preserved for backwards compatibility and tests.
+func SetRateLimit(rps, burst int) {
+	cfg := config.Get()
+	cfg.RateLimitRequestsPerSecond = rps
+	cfg.RateLimitBurst = burst
+	config.Set(cfg)
+}
+
+// SetGitHubToken is preserved for backwards compatibility and tests.
+func SetGitHubToken(token string) {
+	cfg := config.Get()
+	cfg.GitHubToken = token
+	config.Set(cfg)
 }
 
 // SetLogger injects the base structured logger.
@@ -412,12 +404,11 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 }
 
-// decodeAndValidate enforces the body size limit (Fix 2), decodes JSON, and
+// decodeAndValidate enforces the body size limit, decodes JSON, and
 // validates field constraints. Returns false and writes the error response
 // when validation fails.
 func decodeAndValidate(w http.ResponseWriter, r *http.Request) (MetricsRequest, bool) {
-	// Fix 2: cap body size before reading a single byte.
-	r.Body = http.MaxBytesReader(w, r.Body, globalMaxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, config.Get().MaxBodyBytes)
 
 	var req MetricsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -425,7 +416,7 @@ func decodeAndValidate(w http.ResponseWriter, r *http.Request) (MetricsRequest, 
 		if strings.Contains(err.Error(), "http: request body too large") {
 			writeJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{
 				Success: false,
-				Errors:  []string{fmt.Sprintf("request body exceeds %d bytes", globalMaxBodyBytes)},
+				Errors:  []string{fmt.Sprintf("request body exceeds %d bytes", config.Get().MaxBodyBytes)},
 			})
 			return req, false
 		}
@@ -439,37 +430,49 @@ func decodeAndValidate(w http.ResponseWriter, r *http.Request) (MetricsRequest, 
 	return req, true
 }
 
+// requireAuth validates the Bearer token against config.Get().APIKey.
+// When APIKey is empty, auth is disabled and the check always passes.
+func requireAuth(w http.ResponseWriter, r *http.Request) bool {
+	expectedKey := config.Get().APIKey
+	if expectedKey == "" {
+		return true
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{
+			Success: false,
+			Errors:  []string{"authorization header required"},
+		})
+		return false
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{
+			Success: false,
+			Errors:  []string{"authorization header format must be Bearer {token}"},
+		})
+		return false
+	}
+
+	token := parts[1]
+	if token != expectedKey {
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{
+			Success: false,
+			Errors:  []string{"invalid api key"},
+		})
+		return false
+	}
+
+	return true
+}
+
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
 		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
 			Success: false,
 			Errors:  []string{fmt.Sprintf("method %s not allowed; use %s", r.Method, method)},
-		})
-		return false
-	}
-	return true
-}
-
-// requireAuth validates the Bearer token for sensitive endpoints.
-// When globalAPIKey is empty, auth is disabled and the check always passes.
-func requireAuth(w http.ResponseWriter, r *http.Request) bool {
-	if globalAPIKey == "" {
-		return true // auth disabled
-	}
-	auth := r.Header.Get("Authorization")
-	const prefix = "Bearer "
-	if !strings.HasPrefix(auth, prefix) {
-		writeJSON(w, http.StatusUnauthorized, ErrorResponse{
-			Success: false,
-			Errors:  []string{"authorization required: provide 'Authorization: Bearer <token>' header"},
-		})
-		return false
-	}
-	token := strings.TrimPrefix(auth, prefix)
-	if token != globalAPIKey {
-		writeJSON(w, http.StatusUnauthorized, ErrorResponse{
-			Success: false,
-			Errors:  []string{"invalid API key"},
 		})
 		return false
 	}
@@ -544,7 +547,7 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 		realData = globalStore.HasRealData()
 	}
 	authMode := "disabled"
-	if globalAPIKey != "" {
+	if config.Get().APIKey != "" {
 		authMode = "bearer"
 	}
 	writeJSON(w, http.StatusOK, HealthResponse{
@@ -1030,7 +1033,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	dockerAvail := 0
-	if autodetect.IsDockerAvailable() {
+	if autodetect.DetectRuntime() != autodetect.RuntimeUnknown {
 		dockerAvail = 1
 	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
