@@ -13,12 +13,14 @@ import (
 	"absia/pkg/data"
 	"absia/pkg/metricsstore"
 	"absia/pkg/policy"
+	"absia/pkg/telemetry"
 
 	phase1 "absia/internal/intelligence/phase1_signal"
 	phase2 "absia/internal/intelligence/phase2_pattern"
 	phase3 "absia/internal/intelligence/phase3_causal"
 	phase4 "absia/internal/intelligence/phase4_explanation"
 	phase5 "absia/internal/intelligence/phase5_insight"
+	"absia/pkg/cache"
 )
 
 //
@@ -166,45 +168,37 @@ func getPolicyStore() *policy.Store {
 //
 
 var (
-	prevRankingMu       sync.RWMutex
-	prevRankingByTarget map[string][]string // keyed by target node ID
-
-	// Wire Phase 2 Temporal Memory
-	temporalMemoryMu sync.RWMutex
-	temporalMemory   *phase2.SystemMemory
+	prevRankingCache cache.CacheStore
+	temporalCache    cache.CacheStore
 )
 
 func init() {
-	prevRankingByTarget = make(map[string][]string)
-	temporalMemory = &phase2.SystemMemory{
-		EnergyHistory:  make([]float64, 0),
-		StateHistory:   make([]string, 0),
-		PatternHistory: make([]phase2.PatternType, 0),
-	}
+	// The capacities will eventually be configurable via config layer
+	prevRankingCache = cache.NewMemoryLRU(1000)
+	temporalCache = cache.NewMemoryLRU(1000)
 }
 
 // GetPrevRanking returns a copy of the last stored cause ranking for target.
 // Returns nil on the first call for a given target, which preserves first-call
 // behaviour for lgRankInstability which returns 0.0 when prev is nil.
 func GetPrevRanking(target string) []string {
-	prevRankingMu.RLock()
-	defer prevRankingMu.RUnlock()
-	src := prevRankingByTarget[target]
-	if len(src) == 0 {
-		return nil
+	if val, ok := prevRankingCache.Get(target); ok {
+		src := val.([]string)
+		if len(src) == 0 {
+			return nil
+		}
+		cp := make([]string, len(src))
+		copy(cp, src)
+		return cp
 	}
-	cp := make([]string, len(src))
-	copy(cp, src)
-	return cp
+	return nil
 }
 
 // setPrevRanking stores the current cause ranking for the given target.
 func setPrevRanking(target string, causes []string) {
-	prevRankingMu.Lock()
-	defer prevRankingMu.Unlock()
 	dst := make([]string, len(causes))
 	copy(dst, causes)
-	prevRankingByTarget[target] = dst
+	prevRankingCache.Set(target, dst)
 }
 
 //
@@ -225,6 +219,21 @@ func ExecuteFullPipelineFromStore(
 	startTime := time.Now()
 
 	result := &PipelineResult{ErrorsEncountered: make([]string, 0)}
+	
+	defer func() {
+		telemetry.Get().Increment("absia_pipeline_executions")
+		if result != nil && result.ExecutionTimeMS > 0 {
+			telemetry.Get().RecordTime("absia_avg_execution_ms", result.ExecutionTimeMS)
+		} else {
+			telemetry.Get().RecordTime("absia_avg_execution_ms", float64(time.Since(startTime).Nanoseconds())/1e6)
+		}
+		
+		if result != nil && result.SafetyResult != nil {
+			if result.SafetyResult.Fallback.IsUnknown || result.SafetyResult.Confidence.State == phase5.UnknownState {
+				telemetry.Get().Increment("absia_safety_rejections")
+			}
+		}
+	}()
 
 	// Real data requirement.
 	// No synthetic fallback. If the store has no data yet, return a clear
@@ -359,13 +368,27 @@ func ExecuteFullPipelineFromStore(
 	log.Printf("  -> dynamics=%s patterns=%d", dynamics.Type, len(result.Phase2Patterns))
 
 	// Wire BuildSystemState
-	temporalMemoryMu.Lock()
 	var patternsSlice []phase2.Pattern
 	for _, p := range result.Phase2Patterns {
 		patternsSlice = append(patternsSlice, *p)
 	}
+
+	// Retrieve temporal memory from cache
+	var temporalMemory *phase2.SystemMemory
+	if val, ok := temporalCache.Get(primaryNode); ok {
+		temporalMemory = val.(*phase2.SystemMemory)
+	} else {
+		temporalMemory = &phase2.SystemMemory{
+			EnergyHistory:  make([]float64, 0),
+			StateHistory:   make([]string, 0),
+			PatternHistory: make([]phase2.PatternType, 0),
+		}
+	}
+
 	systemState := phase2.BuildSystemState(signalMatrix, patternsSlice, temporalMemory)
-	temporalMemoryMu.Unlock()
+	
+	// Save updated temporal memory back to cache
+	temporalCache.Set(primaryNode, temporalMemory)
 	log.Printf("  -> temporal system state: %s (confidence: %.2f)", systemState.Type, systemState.Confidence)
 
 	//
