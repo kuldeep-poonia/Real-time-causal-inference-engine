@@ -152,7 +152,7 @@ func TestMetricsStore(t *testing.T) {
 		s := metricsstore.New(wc.winSize)
 		nodeID := fmt.Sprintf("node_%s", wc.name)
 		for i := 0; i < wc.insertN; i++ {
-			s.Put(nodeID, makeSample(float64(i)*1.0, 10.0, 0.0))
+			s.Put(nodeID, makeStressSample(float64(i)*1.0, 10.0, 0.0))
 		}
 		actual := s.SampleCount(nodeID)
 		correct := actual == wc.expectKeep
@@ -197,8 +197,8 @@ func TestMetricsStore(t *testing.T) {
 	}
 	for _, lc := range latestCases {
 		// Insert some prior samples then the target sample last
-		s2.Put(lc.nodeID, makeSample(1.0, 5.0, 0.0)) // prior
-		s2.Put(lc.nodeID, makeSample(lc.lambda, lc.mu, lc.queue)) // target = latest
+		s2.Put(lc.nodeID, makeStressSample(1.0, 5.0, 0.0)) // prior
+		s2.Put(lc.nodeID, makeStressSample(lc.lambda, lc.mu, lc.queue)) // target = latest
 		got, ok := s2.GetLatestSample(lc.nodeID)
 		lMatch := math.Abs(got.ArrivalRate-lc.lambda) < 1e-9
 		mMatch := math.Abs(got.ServiceRate-lc.mu) < 1e-9
@@ -231,32 +231,32 @@ func TestMetricsStore(t *testing.T) {
 		{
 			"one_sample", "single sample for one node", false,
 			func(s *metricsstore.Store) {
-				s.Put("n1", makeSample(5.0, 10.0, 0.0))
+				s.Put("n1", makeStressSample(5.0, 10.0, 0.0))
 			},
 		},
 		{
 			"three_samples", "3 samples (below threshold of 4)", false,
 			func(s *metricsstore.Store) {
-				for i := 0; i < 3; i++ { s.Put("n1", makeSample(5.0, 10.0, 0.0)) }
+				for i := 0; i < 3; i++ { s.Put("n1", makeStressSample(5.0, 10.0, 0.0)) }
 			},
 		},
 		{
 			"exactly_4_samples", "exactly 4 samples = threshold", true,
 			func(s *metricsstore.Store) {
-				for i := 0; i < 4; i++ { s.Put("n1", makeSample(5.0, 10.0, 0.0)) }
+				for i := 0; i < 4; i++ { s.Put("n1", makeStressSample(5.0, 10.0, 0.0)) }
 			},
 		},
 		{
 			"five_samples", "5 samples beyond threshold", true,
 			func(s *metricsstore.Store) {
-				for i := 0; i < 5; i++ { s.Put("n1", makeSample(5.0, 10.0, 0.0)) }
+				for i := 0; i < 5; i++ { s.Put("n1", makeStressSample(5.0, 10.0, 0.0)) }
 			},
 		},
 		{
 			"two_nodes_one_enough", "two nodes; only node2 has 4 samples", true,
 			func(s *metricsstore.Store) {
-				s.Put("n1", makeSample(5.0, 10.0, 0.0))
-				for i := 0; i < 4; i++ { s.Put("n2", makeSample(5.0, 10.0, 0.0)) }
+				s.Put("n1", makeStressSample(5.0, 10.0, 0.0))
+				for i := 0; i < 4; i++ { s.Put("n2", makeStressSample(5.0, 10.0, 0.0)) }
 			},
 		},
 	}
@@ -288,7 +288,7 @@ func TestMetricsStore(t *testing.T) {
 	for _, ids := range nodeIDSets {
 		s := metricsstore.New(10)
 		for _, id := range ids {
-			s.Put(id, makeSample(1.0, 10.0, 0.0))
+			s.Put(id, makeStressSample(1.0, 10.0, 0.0))
 		}
 		returned := s.GetAllNodeIDs()
 		sorted := isSortedAsc(returned)
@@ -336,7 +336,7 @@ func TestMetricsStore(t *testing.T) {
 				nodeID := fmt.Sprintf("node_%d", gID)
 				if cc.name == "shared_node_race_16g" { nodeID = "shared_node" }
 				for i := 0; i < cc.insertsEach; i++ {
-					s.Put(nodeID, makeSample(float64(gID)*1.0+float64(i)*0.01, 10.0, 0.0))
+					s.Put(nodeID, makeStressSample(float64(gID)*1.0+float64(i)*0.01, 10.0, 0.0))
 				}
 			}(g)
 		}
@@ -372,7 +372,7 @@ func TestMetricsStore(t *testing.T) {
 
 	// Window < 4 clamped to 4
 	sClamp := metricsstore.New(1)
-	for i := 0; i < 6; i++ { sClamp.Put("x", makeSample(float64(i), 10.0, 0.0)) }
+	for i := 0; i < 6; i++ { sClamp.Put("x", makeStressSample(float64(i), 10.0, 0.0)) }
 	report.EdgeCases.SubMinWindowClamped = sClamp.SampleCount("x") == 4
 
 	// Zero samples → no real data
@@ -380,7 +380,7 @@ func TestMetricsStore(t *testing.T) {
 
 	// Same node multiple Put accumulates correctly
 	sSame := metricsstore.New(10)
-	for i := 0; i < 5; i++ { sSame.Put("x", makeSample(float64(i), 10.0, 0.0)) }
+	for i := 0; i < 5; i++ { sSame.Put("x", makeStressSample(float64(i), 10.0, 0.0)) }
 	report.EdgeCases.SameNodeMultiPut = sSame.SampleCount("x") == 5 && sSame.NodeCount() == 1
 
 	if !emptyOK { } // expected
