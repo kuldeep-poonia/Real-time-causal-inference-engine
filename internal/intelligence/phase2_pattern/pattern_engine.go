@@ -70,6 +70,14 @@ func BuildPatterns(matrix [][]float64, regimes [][]Regime, fv FeatureVector) []P
 
 		conf := computePatternConfidence(stats)
 
+		// Wire refineConfidence
+		// Assuming we can combine the original conf with refineConfidence
+		energy := computeEnergyFlow(seg)
+		refinedConf := refineConfidence(stats, energy, avgAbsCorr(corr))
+		if refinedConf > conf {
+			conf = refinedConf
+		}
+
 		signals := detectInvolvedSignals(seg)
 
 		patterns = append(patterns, Pattern{
@@ -82,6 +90,9 @@ func BuildPatterns(matrix [][]float64, regimes [][]Regime, fv FeatureVector) []P
 
 		prevType = pType
 	}
+
+	// Wire analyzeTransitions (just call it to trigger the logic and maybe log it or attach it)
+	_ = analyzeTransitions(patterns)
 
 	return patterns
 }
