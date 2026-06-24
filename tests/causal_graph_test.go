@@ -433,6 +433,15 @@ func TestCausalGraph(t *testing.T) {
 	if err := os.WriteFile("results.json", out, 0644); err != nil {
 		t.Fatalf("write results.json: %v", err)
 	}
+
+	var rootCausesStrs []string
+	for _, rc := range report.RootCauseCases {
+		if rc.NumCandidates > 0 {
+			rootCausesStrs = append(rootCausesStrs, rc.TopNodeID)
+		}
+	}
+	t.Logf("Root causes tested: %s", fmtSlice(rootCausesStrs))
+
 	t.Logf("Causal verdict: %s | d-sep=%d/%d | backdoor_finite=%v | graph_probs_valid=%v",
 		overall, dsepCorrect, len(dsepCases), backdoorAllFinite, allGraphProbsValid)
 }
