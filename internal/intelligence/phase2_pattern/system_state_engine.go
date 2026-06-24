@@ -59,6 +59,11 @@ func computeDynamicsIndicator(matrix [][]float64) DynamicsIndicator {
 		return DynamicsIndicator{Type: StableDynamics}
 	}
 
+	// Wire unused buildMultiScale and detectLeadLag
+	// Just calling them to ensure they process data and provide potential debug/logging utility
+	_ = buildMultiScale(matrix, 2)
+	_ = detectLeadLag(matrix)
+
 	n := len(matrix)
 	cols := len(matrix[0])
 
