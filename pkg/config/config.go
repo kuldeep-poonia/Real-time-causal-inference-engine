@@ -2,10 +2,33 @@ package config
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
+
+var globalConfig atomic.Value
+
+// Get returns the latest active configuration safely.
+func Get() Config {
+	v := globalConfig.Load()
+	if v == nil {
+		c := Load()
+		globalConfig.Store(c)
+		return c
+	}
+	return v.(Config)
+}
+
+// Set explicitly sets the configuration. Used mainly for testing.
+func Set(cfg Config) {
+	globalConfig.Store(cfg)
+}
 
 // Config holds all runtime-configurable parameters for ABSIA.
 // Values are read once at startup from environment variables.
@@ -135,6 +158,53 @@ func (c Config) HasPrometheus() bool {
 // AuthEnabled returns true when API key authentication is active.
 func (c Config) AuthEnabled() bool {
 	return c.APIKey != ""
+}
+
+// Watch starts polling .env for changes and updates the global config.
+// It uses polling as the primary mechanism and fsnotify as an optional accelerator.
+func Watch(ctx context.Context, pollInterval time.Duration) {
+	// 1. Initial load
+	globalConfig.Store(Load())
+
+	// 2. Setup fsnotify accelerator
+	watcher, err := fsnotify.NewWatcher()
+	if err == nil {
+		_ = watcher.Add(".env")
+	}
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	if watcher != nil {
+		defer watcher.Close()
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Primary polling mechanism
+			globalConfig.Store(Load())
+		case ev, ok := <-func() <-chan fsnotify.Event {
+			if watcher != nil {
+				return watcher.Events
+			}
+			return nil
+		}():
+			if ok && (ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Create == fsnotify.Create) {
+				// Accelerator
+				globalConfig.Store(Load())
+			}
+		case <-func() <-chan error {
+			if watcher != nil {
+				return watcher.Errors
+			}
+			return nil
+		}():
+			// Ignore fsnotify errors, rely on polling
+		}
+	}
 }
 
 // ---- helpers ----------------------------------------------------------------
