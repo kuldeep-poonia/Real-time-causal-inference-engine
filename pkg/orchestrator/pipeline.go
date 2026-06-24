@@ -168,10 +168,19 @@ func getPolicyStore() *policy.Store {
 var (
 	prevRankingMu       sync.RWMutex
 	prevRankingByTarget map[string][]string // keyed by target node ID
+
+	// Wire Phase 2 Temporal Memory
+	temporalMemoryMu sync.RWMutex
+	temporalMemory   *phase2.SystemMemory
 )
 
 func init() {
 	prevRankingByTarget = make(map[string][]string)
+	temporalMemory = &phase2.SystemMemory{
+		EnergyHistory:  make([]float64, 0),
+		StateHistory:   make([]string, 0),
+		PatternHistory: make([]phase2.PatternType, 0),
+	}
 }
 
 // GetPrevRanking returns a copy of the last stored cause ranking for target.
@@ -247,22 +256,19 @@ func ExecuteFullPipelineFromStore(
 
 	schema := phase1.NewSignalSchema([]string{"ArrivalRate", "ServiceRate", "QueueLength"})
 	p1Manager := phase1.NewManager(schema, 8.0, len(realisticData.Points), 0.2)
+	aggregator := phase1.NewAggregator(schema, p1Manager, 8.0)
 
 	for _, nodeID := range realisticData.Nodes {
-		proc := p1Manager.GetProcessor(nodeID)
 		samples := store.GetSamples(nodeID)
 		for _, s := range samples {
-			_ = proc.Ingest(phase1.SignalInput{
-				SignalID: nodeID,
-				Time:     s.Timestamp,
-				Values: map[string]float64{
-					"ArrivalRate": s.ArrivalRate,
-					"ServiceRate": s.ServiceRate,
-					"QueueLength": s.QueueLength,
-				},
-			})
+			aggregator.Add(nodeID, "ArrivalRate", s.ArrivalRate, s.Timestamp)
+			aggregator.Add(nodeID, "ServiceRate", s.ServiceRate, s.Timestamp)
+			aggregator.Add(nodeID, "QueueLength", s.QueueLength, s.Timestamp)
 		}
 	}
+	
+	// Flush aggregator into the manager's processors
+	aggregator.FlushAll()
 	
 	// Wait a tiny bit for the async channels in Phase 1 to drain
 	time.Sleep(50 * time.Millisecond)
@@ -351,6 +357,16 @@ func ExecuteFullPipelineFromStore(
 		result.Phase2Patterns = patterns
 	}
 	log.Printf("  -> dynamics=%s patterns=%d", dynamics.Type, len(result.Phase2Patterns))
+
+	// Wire BuildSystemState
+	temporalMemoryMu.Lock()
+	var patternsSlice []phase2.Pattern
+	for _, p := range result.Phase2Patterns {
+		patternsSlice = append(patternsSlice, *p)
+	}
+	systemState := phase2.BuildSystemState(signalMatrix, patternsSlice, temporalMemory)
+	temporalMemoryMu.Unlock()
+	log.Printf("  -> temporal system state: %s (confidence: %.2f)", systemState.Type, systemState.Confidence)
 
 	//
 	// PHASE 3: CAUSAL GRAPH DISCOVERY + FULL CAUSAL ENGINE
@@ -626,7 +642,12 @@ func ExecuteFullPipelineFromStore(
 		}
 	}
 
-	policy5 := phase5.WarmstartTrain(priorPolicy, phase5Graph, beliefState, phase5Exp, actions, targetNodeID, 100, seed)
+	var policy5 *phase5.Policy
+	if priorPolicy != nil {
+		policy5 = phase5.WarmstartTrain(priorPolicy, phase5Graph, beliefState, phase5Exp, actions, targetNodeID, 100, seed)
+	} else {
+		policy5 = phase5.TrainWithSeed(phase5Graph, beliefState, phase5Exp, actions, targetNodeID, 100, seed)
+	}
 	result.Phase5Policy = policy5
 	log.Printf("  -> RL policy trained: %d actions (warmstart=%v)", len(actions), priorPolicy != nil)
 
@@ -1093,42 +1114,36 @@ func extractColumnFromMatrix(matrix [][]float64, col int) []float64 {
 }
 
 func buildTemporalGraph(dataset *data.Dataset) *phase3.TemporalGraph {
-	tg := &phase3.TemporalGraph{
-		Nodes: make(map[string]*phase3.TemporalSeries),
-		Edges: make([]*phase3.TemporalEdge, 0),
-	}
-
+	events := make([]phase3.Event, 0)
+	
 	const stepSeconds = 15
 	epoch := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	for _, nodeID := range dataset.Nodes {
-		series := &phase3.TemporalSeries{
-			Points: make([]phase3.TemporalPoint, 0, len(dataset.Points)),
-		}
-		stepIdx := 0
-		for _, point := range dataset.Points {
-			if point.Missing[nodeID] {
-				stepIdx++
-				continue
+	stepIdx := 0
+	for _, point := range dataset.Points {
+		t := epoch.Add(time.Duration(stepIdx) * stepSeconds * time.Second)
+		for _, nodeID := range dataset.Nodes {
+			if !point.Missing[nodeID] {
+				events = append(events, phase3.Event{
+					NodeID:     nodeID,
+					Timestamp:  t,
+					Value:      point.Values[nodeID],
+					NoiseLevel: 0.1,
+					Intensity:  1.0,
+					Confidence: 1.0,
+					Type:       "data_point",
+				})
 			}
-			t := epoch.Add(time.Duration(stepIdx) * stepSeconds * time.Second)
-			tn := &phase3.TemporalNode{
-				NodeID:     nodeID,
-				Time:       t,
-				Value:      point.Values[nodeID],
-				Noise:      0.1,
-				Intensity:  1.0,
-				Confidence: 1.0,
-			}
-			series.Points = append(series.Points, phase3.TemporalPoint{
-				Time: t,
-				Node: tn,
-			})
-			stepIdx++
 		}
-		tg.Nodes[nodeID] = series
+		stepIdx++
 	}
-	return tg
+
+	cfg := phase3.TimeConfig{
+		BucketSize:    time.Duration(stepSeconds) * time.Second,
+		MaxAllowedGap: time.Duration(stepSeconds*3) * time.Second,
+	}
+
+	return phase3.BuildTemporalGraph(events, cfg)
 }
 
 func mostDownstreamNode(graph *phase3.Graph, nodes []string) string {
