@@ -1,492 +1,71 @@
-# ABSIA — Autonomous Bayesian System Intelligence Agent
+<div align="center">
+  <h1>ABSIA: Real-Time Causal Inference Engine</h1>
+  <p><b>Deterministic Root-Cause Analysis for Distributed Systems</b></p>
+</div>
 
-![Go](https://img.shields.io/badge/Go-1.23+-blue?style=flat-square)
-![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square)
-![Docker](https://img.shields.io/badge/Docker-Ready-brightgreen?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+<br/>
 
-> Causal intelligence for distributed systems. Identifies root causes from system metrics using causal inference and Pearl's do-calculus. Drop it into your Docker stack.
+## 🚀 The Core Product
 
----
+**ABSIA** (Automated Bottleneck Surveillance & Intervention Architecture) is a mathematical, real-time causal inference engine built to diagnose distributed systems (like microservices and Docker containers) at the foundational physics level.
 
-## How It Works
+**This is not an AI project.** It does not use LLMs, Generative AI, or fuzzy machine learning. 
 
-Most observability tools show you *what* is happening. ABSIA answers *why*.
-
-It runs a five-phase intelligence pipeline on every analysis request:
-
-| Phase | What It Does |
-|---|---|
-| **Signal Physics** | Reads CPU/memory from your containers and maps them to M/M/1 queue metrics — arrival rate λ, service rate μ, and queue depth L |
-| **Pattern Detection** | Detects spikes, drift, regime changes, and divergence across all nodes |
-| **Causal Graph** | Builds a directed causal graph using Pearl's do-calculus, backdoor adjustment, and d-separation |
-| **Explanation** | Produces a ranked, evidence-backed root-cause narrative with uncertainty quantification |
-| **Policy + Safety Gate** | Recommends ranked interventions, then runs five independent safety checks — if any fail, it returns `UNKNOWN` instead of a bad recommendation |
-
-The safety gate is not optional. ABSIA never surfaces a recommendation it isn't confident in.
+ABSIA is a highly deterministic engine rooted in **Queueing Theory** and **Structural Causal Models (SCM)**. It ingests traffic metrics, calculates the physical queuing limits of your system (arrival rates vs. service rates), builds a Directed Acyclic Graph (DAG) of your network, and mathematically proves exactly which microservice is causing a cascading failure across your infrastructure.
 
 ---
 
-## Quick Start
+## ⚡ The Problem: Observability is Broken
 
-**Requirements: Docker. Nothing else.**
+Modern observability tools (Prometheus, Grafana, Datadog) are fundamentally reactive. They show you *symptoms*. 
+When a system goes down, your dashboard turns red with hundreds of cascading 500 errors across 10 different services. Your engineers are forced to manually correlate logs, trace IDs, and metrics to guess where the failure originated.
 
-### One command
+### The ABSIA Solution
+
+ABSIA shifts observability from **correlation** to **causation**. 
+
+Instead of alerting you that "Service C is slow," ABSIA calculates the causal path to tell you: *"Service A's service rate has dropped to 10 req/sec, causing a queue buildup that is mathematically starving Service B and crashing Service C. Restart Service A."*
+
+---
+
+## 🏎️ Quick Start
+
+ABSIA is compiled as a single, static, highly-optimized Go binary. It is incredibly lightweight and can be deployed via Docker in seconds.
 
 ```bash
+# Deploy the ABSIA Engine
 docker run -d \
-  --name absia \
+  --name absia-engine \
   -p 8080:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  yourdockerhub/absia:latest
+  -v absia_policies:/data/policies \
+  poonia98/absia:latest
 ```
 
-Open **http://localhost:8080** — the dashboard appears immediately. ABSIA discovers every running container and starts collecting metrics automatically. No config files. No Prometheus setup. No [...]
+Once deployed, ABSIA will automatically begin discovering local Docker containers (if configured) or wait for manual data ingestion at `POST /ingest`. 
+
+You can view the real-time diagnostics dashboard by navigating to `http://localhost:8080`.
 
 ---
 
-### With docker-compose (recommended if you have other services)
+## 🧭 The Premium Diagnostics Dashboard
 
-Create a `docker-compose.yml` in your project:
+ABSIA features a pristine, Apple-style light mode dashboard that requires zero configuration. It is designed to be readable by anyone from a Principal Engineer to a Product Manager.
 
-```yaml
-services:
-  absia:
-    image: poonia98/absia:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  # Your existing services — ABSIA discovers them automatically
-  api:
-    image: myorg/api:latest
-
-  worker:
-    image: myorg/worker:latest
-
-  db:
-    image: postgres:16-alpine
-```
-
-```bash
-docker compose up -d
-```
-
-ABSIA polls every container's CPU and memory every 15 seconds. After four samples per container (~1 minute), the pipeline has enough data to run causal analysis. The dashboard updates live.
+- **Live Service Discovery:** Tracks the active queuing load of all discovered services.
+- **Incident Explanation:** Translates raw SCM mathematics into a plain-English narrative detailing exactly where the bottleneck is.
+- **Recommended Actions:** Provides high-confidence, actionable remediation steps (e.g., Throttle, Scale, Restart) based on physical system constraints.
 
 ---
 
-## What You See
+## 📖 Deep Dive Documentation
 
-Once running, open **http://localhost:8080**.
+For engineers, architects, and engineering managers evaluating ABSIA, please read our exhaustive documentation suite:
 
-The dashboard shows:
-
-- **Node inventory** — every discovered container with its current load status (`healthy` / `watch` / `pressure` / `overloaded`)
-- **Real-time metrics** — arrival rate, service rate, queue depth, utilisation (ρ = λ/μ)
-- **Causal analysis** — run on demand or continuously; shows the most probable root cause, causal chain, and confidence score
-- **Safety status** — whether the pipeline is confident enough to recommend action, and why not if it isn't
+- [**DOCUMENTATION.md**](./DOCUMENTATION.md) - The massive, exhaustive guide to ABSIA. Covers detailed mechanics, Return on Investment (ROI), failure semantics, and the exact mathematics used.
+- [**ARCHITECTURE.md**](./ARCHITECTURE.md) - The engineering blueprint. Contains Mermaid.js dependency graphs and the 5-phase inference pipeline.
+- [**API.md**](./API.md) - The complete HTTP API contract for custom integrations.
 
 ---
-
-## Connecting Your Own Metrics
-
-If you want richer signals than CPU/memory (e.g. request rate, error rate, queue depth from your app), push them directly:
-
-```bash
-curl -X POST http://localhost:8080/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "node_id": "orders-api",
-    "arrival_rate": 340,
-    "service_rate": 280,
-    "queue_length": 42
-  }'
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `node_id` | string | Any name — service, queue, database, worker. Used as the causal graph node identifier. |
-| `arrival_rate` | float | Work arriving per second (requests, messages, jobs). |
-| `service_rate` | float | Work the node can process per second. Must be > 0. |
-| `queue_length` | float | Current backlog depth. |
-
-After **4 samples**, ABSIA treats that node as real data and includes it in causal analysis. Docker-discovered containers and manually pushed nodes coexist in the same pipeline.
-
----
-
-## API Reference
-
-All endpoints return JSON. All analysis responses include safety gate fields — `confidence_score`, `confidence_state`, `latent_risk`, `fallback_triggered` — regardless of which endpoint you c[...]
-
-### `GET /health`
-
-Liveness and readiness probe. Safe to use as a Docker healthcheck.
-
-```bash
-curl http://localhost:8080/health
-```
-
-```json
-{
-  "status": "ok",
-  "ready": true,
-  "version": "2.1.0",
-  "real_data_available": true,
-  "ingested_node_count": 4,
-  "auth_mode": "disabled"
-}
-```
-
----
-
-### `GET /nodes`
-
-Current node inventory. Shows every container or pushed node with its latest metrics and status.
-
-```bash
-curl http://localhost:8080/nodes
-```
-
-```json
-{
-  "success": true,
-  "real_data_available": true,
-  "node_count": 3,
-  "nodes": [
-    {
-      "node_id": "orders-api",
-      "arrival_rate": 340,
-      "service_rate": 280,
-      "queue_length": 42,
-      "load": 1.214,
-      "sample_count": 12,
-      "pipeline_ready": true,
-      "status": "overloaded",
-      "last_seen": "2025-05-23T10:14:00Z"
-    },
-    {
-      "node_id": "payment-worker",
-      "arrival_rate": 0.61,
-      "service_rate": 1.0,
-      "queue_length": 28.4,
-      "load": 0.61,
-      "sample_count": 12,
-      "pipeline_ready": true,
-      "status": "watch",
-      "last_seen": "2025-05-23T10:14:00Z"
-    }
-  ]
-}
-```
-
-**Status values:**
-
-| Status | Load (ρ = λ/μ) | Meaning |
-|---|---|---|
-| `healthy` | < 0.60 | Normal operating range |
-| `watch` | 0.60 – 0.84 | Elevated, monitor closely |
-| `pressure` | 0.85 – 1.04 | High load, degradation likely |
-| `overloaded` | ≥ 1.05 | Saturated, queueing unbounded |
-
----
-
-### `POST /ingest`
-
-Store one metrics sample for a node. No response body on success (HTTP 204).
-
-```bash
-curl -X POST http://localhost:8080/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"node_id":"orders-api","arrival_rate":340,"service_rate":280,"queue_length":42}'
-```
-
----
-
-### `POST /analyze`
-
-Run the full five-phase causal pipeline. Returns root cause, confidence, and ranked contributing factors.
-
-```bash
-curl -X POST http://localhost:8080/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"node_id":"orders-api","arrival_rate":340,"service_rate":280,"queue_length":42}'
-```
-
-```json
-{
-  "success": true,
-  "data_source": "real",
-  "root_cause": "payment-worker",
-  "causes": {
-    "payment-worker": 0.847,
-    "orders-api": 0.312
-  },
-  "backdoor_effects": {
-    "payment-worker": 0.731
-  },
-  "actions_recommended": 3,
-  "patterns_detected": 2,
-  "confidence_score": 0.812,
-  "confidence_state": "CONFIRMED",
-  "latent_risk": "LOW",
-  "fallback_triggered": false,
-  "execution_time_ms": 47.3
-}
-```
-
----
-
-### `POST /explain`
-
-Returns the causal explanation — the evidence chain, affected nodes, and uncertainty per node.
-
-```bash
-curl -X POST http://localhost:8080/explain \
-  -H "Content-Type: application/json" \
-  -d '{"node_id":"orders-api","arrival_rate":340,"service_rate":280,"queue_length":42}'
-```
-
-```json
-{
-  "success": true,
-  "data_source": "real",
-  "root_cause": "payment-worker",
-  "causes": ["payment-worker", "orders-api"],
-  "effects": {
-    "payment-worker": 0.731,
-    "orders-api": 0.312
-  },
-  "uncertainty": {
-    "payment-worker": 0.091,
-    "orders-api": 0.184
-  },
-  "confidence_score": 0.812,
-  "confidence_state": "CONFIRMED",
-  "latent_risk": "LOW",
-  "fallback_triggered": false,
-  "execution_time_ms": 39.1
-}
-```
-
----
-
-### `POST /act`
-
-Returns ranked remediation recommendations. Requires authentication if `ABSIA_API_KEY` is set. Returns HTTP `503` with no actions when the safety gate fires — never a guess.
-
-```bash
-curl -X POST http://localhost:8080/act \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ABSIA_API_KEY" \
-  -d '{"node_id":"orders-api","arrival_rate":340,"service_rate":280,"queue_length":42}'
-```
-
-```json
-{
-  "success": true,
-  "data_source": "real",
-  "recommended_actions": [
-    {
-      "action": "scale_out",
-      "target": "payment-worker",
-      "priority": 1,
-      "confidence": 0.812,
-      "expected_improvement": 0.38
-    }
-  ],
-  "policy_trained": true,
-  "confidence_score": 0.812,
-  "confidence_state": "CONFIRMED",
-  "latent_risk": "LOW",
-  "fallback_triggered": false,
-  "execution_time_ms": 52.6
-}
-```
-
-When confidence is too low:
-
-```json
-{
-  "success": false,
-  "fallback_triggered": true,
-  "confidence_state": "UNKNOWN",
-  "latent_risk": "HIGH",
-  "errors": ["safety gate: insufficient confidence to recommend actions"]
-}
-```
-
----
-
-### `GET /metrics`
-
-Prometheus-compatible metrics endpoint. Scrape with any Prometheus-compatible system or leave it alone — it's there if you need it.
-
-```
-# HELP absia_nodes_total Number of distinct nodes in the metrics store
-# TYPE absia_nodes_total gauge
-absia_nodes_total 4
-
-# HELP absia_nodes_with_data Nodes with enough samples to run the pipeline (>=4)
-# TYPE absia_nodes_with_data gauge
-absia_nodes_with_data 4
-
-# HELP absia_store_samples_total Total samples stored across all nodes
-# TYPE absia_store_samples_total counter
-absia_store_samples_total 192
-
-# HELP absia_docker_available 1 if the Docker socket is reachable
-# TYPE absia_docker_available gauge
-absia_docker_available 1
-```
-
----
-
-## Configuration
-
-Everything has a safe default. You only set what you need to change.
-
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8080` | HTTP listen port inside the container |
-| `ABSIA_API_KEY` | *(empty)* | Bearer token protecting `/act`. Leave empty to disable auth |
-| `ABSIA_POLICY_STORE_PATH` | `/data/policies` | Where RL policy weights are persisted between restarts |
-| `ABSIA_LOG_LEVEL` | `info` | `debug` · `info` · `warn` · `error` |
-| `ABSIA_SEED` | `42` | Deterministic seed for reproducible pipeline runs |
-| `ABSIA_RATE_LIMIT_RPS` | `10` | Requests per second per IP across analysis endpoints |
-| `ABSIA_RATE_LIMIT_BURST` | `20` | Burst allowance above the sustained rate |
-| `ABSIA_MAX_BODY_BYTES` | `1048576` | Maximum JSON request body size (1 MiB) |
-| `ABSIA_READ_TIMEOUT_SECONDS` | `5` | HTTP server read timeout |
-| `ABSIA_WRITE_TIMEOUT_SECONDS` | `30` | HTTP server write timeout (pipeline can take ~50ms) |
-| `ABSIA_IDLE_TIMEOUT_SECONDS` | `120` | HTTP keep-alive idle timeout |
-
----
-
-## Persisting Policy Weights
-
-ABSIA's reinforcement learning policy learns which interventions work for your specific system. By default, that knowledge is lost on container restart. Mount a volume to keep it:
-
-```yaml
-services:
-  absia:
-    image: yourdockerhub/absia:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - absia_policies:/data/policies
-
-volumes:
-  absia_policies:
-```
-
----
-
-## Security
-
-### Protecting `/act`
-
-The `/act` endpoint recommends or triggers remediations. If anything in your stack automates on its output, lock it down:
-
-```yaml
-environment:
-  ABSIA_API_KEY: "your-secret-key"
-```
-
-Then callers must include:
-
-```
-Authorization: Bearer your-secret-key
-```
-
-`/health`, `/nodes`, `/ingest`, `/analyze`, and `/explain` are unauthenticated by default — appropriate for internal networks.
-
-### Docker Socket Access
-
-Mounting `/var/run/docker.sock` gives ABSIA read access to your container metadata and stats. It uses this only to list running containers and poll CPU/memory. If your threat model requires isola[...]
-
-### Network Boundaries
-
-ABSIA makes no outbound network calls. It only listens on its configured port and reads from the Docker socket you mount. There are no telemetry calls, no license checks, no external dependencies[...]
-
----
-
-## Building from Source
-
-ABSIA has **zero external Go dependencies**. The only requirement is Go 1.23+.
-
-```bash
-git clone https://github.com/you/absia
-cd absia
-go build ./...
-go test ./...
-go run .
-```
-
-Build the Docker image:
-
-```bash
-docker build -t absia:latest .
-```
-
-The resulting image is **~8 MB** (scratch base + static binary + CA certificates).
-
----
-
-## Architecture
-
-```
-Docker socket
-     │
-     ▼
-pkg/docker          ← stdlib HTTP client over /var/run/docker.sock
-     │
-     ▼
-pkg/autodetect      ← container discovery + stats → M/M/1 metrics (every 15s)
-     │
-     ▼
-pkg/metricsstore    ← sliding-window time-series store (last 60 samples per node)
-     │
-     ▼
-pkg/orchestrator    ← five-phase pipeline coordinator
-     │
-     ├── Phase 1: pkg/intelligence/phase1_signal    (signal physics, EMA processors)
-     ├── Phase 2: pkg/intelligence/phase2_pattern   (change-point, divergence, drift)
-     ├── Phase 3: pkg/intelligence/phase3_causal    (causal graph, do-calculus, d-sep)
-     ├── Phase 4: pkg/intelligence/phase4_explanation (root-cause narrative, uncertainty)
-     └── Phase 5: pkg/intelligence/phase5_insight   (RL policy, safety gate)
-          │
-          ▼
-     pkg/api         ← HTTP handlers + embedded dashboard UI
-```
-
-The pipeline is fully deterministic given the same seed and input data. Tests reproduce exactly.
-
----
-
-## FAQ
-
-**Does ABSIA require Prometheus?**
-No. It reads directly from the Docker socket. Prometheus is not required, not started, and not contacted unless you add it yourself.
-
-**Does ABSIA modify my containers?**
-No. It is read-only. It reads container metadata and stats. It never restarts, stops, or reconfigures anything.
-
-**What if I don't mount the Docker socket?**
-ABSIA starts normally and logs a warning. You can push metrics manually via `POST /ingest` instead. Everything else works.
-
-**How many containers can it handle?**
-The pipeline runs a causal graph over every node. Practically tested up to ~50 nodes. Beyond that, analysis latency increases but the system stays stable — the safety gate will flag low-confide[...]
-
-**Can I run multiple ABSIA instances?**
-Yes, but they won't share state. Each instance maintains its own metrics store and policy weights. For a shared view, push from one instance to another via `/ingest`.
-
-**The safety gate keeps returning UNKNOWN. Why?**
-Usually one of: not enough data yet (need ≥4 samples per node), very high latent risk detected (hidden variable suspected in the causal graph), or ranking instability between consecutive runs ([...]
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+<div align="center">
+  <i>Deterministic Infrastructure Intelligence.</i>
+</div>
