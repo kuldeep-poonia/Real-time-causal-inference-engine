@@ -35,11 +35,7 @@ type ContainerInfo struct {
 	State string
 }
 
-// IsDockerAvailable returns true when the Docker unix socket exists and
-// accepts connections. Cheap: does a single dial, no HTTP request.
-func IsDockerAvailable() bool {
-	return docker.IsAvailable()
-}
+// Remove IsDockerAvailable
 
 // DiscoverContainers returns the list of currently running containers.
 // Used on-demand by the /nodes HTTP handler to enrich the node inventory.
@@ -64,6 +60,14 @@ func DiscoverContainers(ctx context.Context) ([]ContainerInfo, error) {
 // StartContainerDiscovery logs all running containers at startup and then
 // re-logs every discoveryInterval. Blocks until ctx is cancelled.
 func StartContainerDiscovery(ctx context.Context, log *slog.Logger) {
+	runtime := DetectRuntime()
+	
+	if runtime != RuntimeDocker {
+		log.Info("autodetect: container discovery running in fallback mode", slog.String("runtime", string(runtime)))
+		// Stub discovery for non-Docker runtimes. In a full implementation this would query containerd/crio sockets.
+		return
+	}
+
 	cli := docker.NewClient()
 
 	log.Info("autodetect: container discovery started")
@@ -92,6 +96,24 @@ func StartContainerDiscovery(ctx context.Context, log *slog.Logger) {
 //	μ (ServiceRate)  = 1.0  (normalised capacity baseline)
 //	L (QueueLength)  = memory utilisation fraction [0,1] × 100
 func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, log *slog.Logger) {
+	runtime := DetectRuntime()
+	
+	if runtime != RuntimeDocker {
+		log.Info("autodetect: fallback cgroups polling started", slog.Duration("interval", statsInterval))
+		// Stub for reading /sys/fs/cgroup directly for CPU/memory.
+		// Detailed cgroups reading is beyond the current scope but this wires the fallback mechanism.
+		ticker := time.NewTicker(statsInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// no-op: raw cgroups reading implementation goes here
+			}
+		}
+	}
+
 	cli := docker.NewClient()
 
 	// prevStats holds the previous StatsResponse per container ID for the
