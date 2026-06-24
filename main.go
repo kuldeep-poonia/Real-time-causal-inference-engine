@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"absia/pkg/api"
 	"absia/pkg/autodetect"
@@ -16,6 +17,7 @@ import (
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
 	"absia/pkg/policy"
+	"absia/pkg/telemetry"
 )
 
 func main() {
@@ -28,17 +30,21 @@ func main() {
 	// ── Metrics store — must be initialised before autodetect goroutines
 	// so that PushContainerStatsToStore has a valid store reference.
 	store := metricsstore.New(60)
+	
+	// ── Telemetry initialization
+	telemetry.SetTracker(telemetry.NewExpvarTracker())
 
 	// ── Docker autodiscovery (plug-and-play, graceful degradation)
-	// Checks the Docker socket at startup; skips silently if absent.
-	if autodetect.IsDockerAvailable() {
-		structLog.Info("Docker socket detected — starting container autodiscovery and metrics collection")
+	// Checks runtime availability at startup. Order: Docker -> Containerd -> CRI-O -> cgroups.
+	runtime := autodetect.DetectRuntime()
+	if runtime != autodetect.RuntimeUnknown {
+		structLog.Info("Container runtime detected — starting container autodiscovery and metrics collection", slog.String("runtime", string(runtime)))
 		bgCtx := context.Background()
 		go autodetect.StartContainerDiscovery(bgCtx, structLog)
 		go autodetect.PushContainerStatsToStore(bgCtx, store, structLog)
 	} else {
-		structLog.Warn("Docker socket not available — autodiscovery disabled; " +
-			"mount /var/run/docker.sock or push metrics manually via POST /ingest")
+		structLog.Warn("No supported container runtime detected — autodiscovery disabled; " +
+			"push metrics manually via POST /ingest")
 	}
 
 	structLog.Info("ABSIA starting",
@@ -67,13 +73,18 @@ func main() {
 		structLog.Info("policy store ready", slog.String("path", cfg.PolicyStorePath))
 	}
 
+	// ── Signal-aware root context for graceful shutdown.
+	// SIGTERM is the standard Kubernetes/Docker termination signal.
+	// SIGINT covers Ctrl-C in development.
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
 	// ── Wire the metrics store and configuration into the API layer
 	api.SetStore(store)
-	api.SetAPIKey(cfg.APIKey)
-	api.SetMaxBodyBytes(cfg.MaxBodyBytes)
 	api.SetLogger(structLog)
-	api.SetRateLimit(cfg.RateLimitRequestsPerSecond, cfg.RateLimitBurst)
-	api.SetGitHubToken(cfg.GitHubToken)
+	
+	// Start config hot-reloading background process
+	go config.Watch(rootCtx, 10*time.Second)
 
 	if cfg.RateLimitRequestsPerSecond > 0 {
 		structLog.Info("rate limiting enabled",
@@ -83,12 +94,6 @@ func main() {
 	} else {
 		structLog.Warn("rate limiting disabled — set ABSIA_RATE_LIMIT_RPS to enable")
 	}
-
-	// ── Signal-aware root context for graceful shutdown.
-	// SIGTERM is the standard Kubernetes/Docker termination signal.
-	// SIGINT covers Ctrl-C in development.
-	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
 
 	// ── HTTP server
 	port := 8080
