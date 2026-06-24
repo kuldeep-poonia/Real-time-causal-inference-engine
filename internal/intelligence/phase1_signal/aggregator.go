@@ -124,6 +124,17 @@ func (a *Aggregator) flushTick(tick int64) {
 }
 
 /*
+flush all ticks manually
+*/
+func (a *Aggregator) FlushAll() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for tick := range a.buffer {
+		a.flushTick(tick)
+	}
+}
+
+/*
 auto flush loop
 */
 func (a *Aggregator) Start() {
