@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Diagnostics</title>
+    <link rel="stylesheet" href="app.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="top-nav">
+        <div class="logo">System Diagnostics Platform</div>
+        
+        <div class="header-stats">
+            <span class="stat-item" id="header-time">--:-- --</span>
+            <span class="stat-divider">|</span>
+            <span class="stat-item" id="header-active-nodes">0 Services</span>
+            <span class="stat-divider">|</span>
+            <div class="health-status" id="health-status-badge">
+                Checking Health...
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Sidebar for nodes -->
+        <aside class="sidebar">
+            <h2>Active Services</h2>
+            <p class="subtitle">Select a service to run diagnostics</p>
+            <div id="nodes-list" class="nodes-list">
+                <div class="loading-text">Loading services...</div>
+            </div>
+        </aside>
+
+        <!-- Main content area for diagnostics -->
+        <section class="diagnostic-panel">
+            <div id="welcome-message" class="state-message">
+                <h2>Ready for Analysis</h2>
+                <p>Select a service from the left to diagnose performance issues.</p>
+            </div>
+
+            <div id="loading-spinner" class="state-message hidden">
+                <div class="spinner"></div>
+                <h2>Running Diagnostics...</h2>
+                <p>Analyzing health, load, and dependencies.</p>
+            </div>
+
+            <div id="diagnostic-results" class="results-container hidden">
+                <div class="result-header">
+                    <h2 id="result-title">Service Analysis</h2>
+                    <span id="result-confidence" class="confidence-badge"></span>
+                </div>
+                
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <h3>Current Load</h3>
+                        <div class="metric-value" id="metric-load">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Expected Load</h3>
+                        <div class="metric-value" id="metric-expected">-</div>
+                    </div>
+                </div>
+
+                <div class="analysis-section hidden" id="section-explanation">
+                    <h3>Incident Explanation</h3>
+                    <div id="explanation-text" class="explanation-text"></div>
+                    <ul id="explanation-narrative" class="insight-list" style="margin-top:1rem;"></ul>
+                </div>
+
+                <div class="analysis-section" id="section-causes">
+                    <h3>Identified Issues</h3>
+                    <ul id="list-causes" class="insight-list"></ul>
+                </div>
+
+                <div class="analysis-section hidden" id="section-actions">
+                    <h3>Recommended Actions</h3>
+                    <ul id="list-actions" class="insight-list"></ul>
+                </div>
+            </div>
+            
+            <div id="waiting-data" class="state-message hidden">
+                <h2>Waiting for Data</h2>
+                <p>The system is collecting data. Please ensure the service is active.</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
