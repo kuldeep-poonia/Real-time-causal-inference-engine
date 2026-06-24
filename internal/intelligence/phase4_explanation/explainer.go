@@ -610,6 +610,11 @@ func GenerateExplanation(graph *CausalGraph, dataset *Dataset, target string) Ex
 		causeSet[p] = true
 	}
 
+	// Wire ancestors logic to ensure complete causal chains are considered
+	for a := range ancestors(graph, target) {
+		causeSet[a] = true
+	}
+
 	// Sort cause IDs for deterministic processing order.
 	causeIDs := make([]string, 0, len(causeSet))
 	for c := range causeSet {
