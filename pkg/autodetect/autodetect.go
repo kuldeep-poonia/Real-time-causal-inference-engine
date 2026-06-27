@@ -15,6 +15,7 @@ import (
 
 	"absia/pkg/docker"
 	"absia/pkg/metricsstore"
+	"absia/pkg/signals"
 )
 
 const (
@@ -34,8 +35,6 @@ type ContainerInfo struct {
 	Image string
 	State string
 }
-
-// Remove IsDockerAvailable
 
 // DiscoverContainers returns the list of currently running containers.
 // Used on-demand by the /nodes HTTP handler to enrich the node inventory.
@@ -88,20 +87,12 @@ func StartContainerDiscovery(ctx context.Context, log *slog.Logger) {
 }
 
 // PushContainerStatsToStore polls Docker stats every statsInterval and writes
-// the derived M/M/1 queue metrics into store. Blocks until ctx is cancelled.
-//
-// Metric mapping (Docker → M/M/1):
-//
-//	λ (ArrivalRate)  = CPU utilisation fraction [0,1]
-//	μ (ServiceRate)  = 1.0  (normalised capacity baseline)
-//	L (QueueLength)  = memory utilisation fraction [0,1] × 100
+// the derived metrics into store. Blocks until ctx is cancelled.
 func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, log *slog.Logger) {
 	runtime := DetectRuntime()
 	
 	if runtime != RuntimeDocker {
 		log.Info("autodetect: fallback cgroups polling started", slog.Duration("interval", statsInterval))
-		// Stub for reading /sys/fs/cgroup directly for CPU/memory.
-		// Detailed cgroups reading is beyond the current scope but this wires the fallback mechanism.
 		ticker := time.NewTicker(statsInterval)
 		defer ticker.Stop()
 		for {
@@ -116,9 +107,7 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 
 	cli := docker.NewClient()
 
-	// prevStats holds the previous StatsResponse per container ID for the
-	// CPU delta calculation. Without a prior snapshot, cpuPercent returns 0.
-	prevStats := make(map[string]*docker.StatsResponse)
+	baselines := make(map[string]*signals.AdaptiveBaseline)
 	var mu sync.Mutex
 
 	log.Info("autodetect: metrics collection started", slog.Duration("interval", statsInterval))
@@ -139,25 +128,41 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 				continue
 			}
 
+			// Ensure a baseline exists for every currently running container
+			mu.Lock()
+			for _, c := range containers {
+				if _, exists := baselines[c.ID]; !exists {
+					baselines[c.ID] = signals.NewAdaptiveBaseline(c.ID)
+				}
+			}
+			mu.Unlock()
+
 			var wg sync.WaitGroup
 			for _, c := range containers {
 				wg.Add(1)
 				go func(c docker.Container) {
 					defer wg.Done()
-					collectOne(ctx, cli, c, store, &mu, prevStats, log)
+					
+					mu.Lock()
+					baseline := baselines[c.ID]
+					mu.Unlock()
+					
+					if baseline != nil {
+						collectOne(ctx, cli, c, store, baseline, log)
+					}
 				}(c)
 			}
 			wg.Wait()
 
-			// Evict stale prev-stats for containers no longer running.
+			// Evict stale baselines for containers no longer running.
 			mu.Lock()
 			alive := make(map[string]bool, len(containers))
 			for _, c := range containers {
 				alive[c.ID] = true
 			}
-			for id := range prevStats {
+			for id := range baselines {
 				if !alive[id] {
-					delete(prevStats, id)
+					delete(baselines, id)
 				}
 			}
 			mu.Unlock()
@@ -167,13 +172,33 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
+func extractNetworkSnapshot(cur *docker.StatsResponse) signals.NetworkSnapshot {
+	var rxBytes, txBytes, rxDropped, txDropped, rxPackets, txPackets uint64
+	for _, net := range cur.Networks {
+		rxBytes += net.RxBytes
+		txBytes += net.TxBytes
+		rxDropped += net.RxDropped
+		txDropped += net.TxDropped
+		rxPackets += net.RxPackets
+		txPackets += net.TxPackets
+	}
+	return signals.NetworkSnapshot{
+		RxBytes:   rxBytes,
+		TxBytes:   txBytes,
+		RxDropped: rxDropped,
+		TxDropped: txDropped,
+		RxPackets: rxPackets,
+		TxPackets: txPackets,
+		Timestamp: time.Now(),
+	}
+}
+
 func collectOne(
 	ctx context.Context,
 	cli *docker.Client,
 	c docker.Container,
 	store *metricsstore.Store,
-	mu *sync.Mutex,
-	prevStats map[string]*docker.StatsResponse,
+	baseline *signals.AdaptiveBaseline,
 	log *slog.Logger,
 ) {
 	cur, err := cli.ContainerStats(ctx, c.ID)
@@ -185,33 +210,52 @@ func collectOne(
 		return
 	}
 
-	mu.Lock()
-	prev := prevStats[c.ID]
-	prevStats[c.ID] = cur
-	mu.Unlock()
+	// Update baseline states and fetch the previous ones for delta calculation
+	prevMemory := baseline.UpdateMemoryStats(cur)
+	
+	curNetSnap := extractNetworkSnapshot(cur)
+	prevNetSnap := baseline.UpdateNetwork(curNetSnap)
 
-	cpuFrac := 0.0
-	if prev != nil {
-		cpuFrac = docker.CPUPercent(cur, prev)
+	var prevCPU *signals.PreviousCPU
+	if cur.CPUStats.CPUUsage.TotalUsage > 0 {
+		prevCPU = baseline.UpdateCPU(cur.CPUStats.CPUUsage.TotalUsage, cur.CPUStats.SystemCPUUsage)
 	}
-	memFrac := docker.MemPercent(cur)
+
+	// Skip computation on the very first cycle until we have two points for delta math
+	if prevCPU == nil || prevMemory == nil || prevNetSnap == nil {
+		return
+	}
+
+	// 1. Gather component signals
+	computeSig := signals.CollectCompute(cur, prevCPU)
+	memorySig := signals.CollectMemory(cur, prevMemory, statsInterval.Seconds())
+	netSig := signals.CollectNetwork(cur, prevNetSnap, statsInterval.Seconds())
+
+	// 2. Fuse signals into unified causal pipeline inputs
+	fused := signals.FuseSignals(computeSig, memorySig, netSig, baseline)
 
 	name := containerName(c.Names, c.ID)
 	now := time.Now()
 
+	// 3. Write into the standard pipeline store
 	store.Put(name, metricsstore.NodeSample{
-		ArrivalRate: cpuFrac,       // λ: CPU fraction [0,1]
-		ServiceRate: 1.0,           // μ: normalised capacity
-		QueueLength: memFrac * 100, // L: memory% scaled 0–100 for pipeline
-		Timestamp:   float64(now.Unix()),
-		WallTime:    now,
+		ArrivalRate:     fused.ArrivalRate,
+		ServiceRate:     fused.ServiceRate,
+		QueueLength:     fused.QueueLength,
+		ComputePressure: fused.ComputePressure,
+		MemoryPressure:  fused.MemoryPressure,
+		NetworkPressure: fused.NetworkPressure,
+		DominantSignal:  fused.DominantSignal,
+		Timestamp:       float64(now.Unix()),
+		WallTime:        now,
 	})
 
 	log.Debug("autodetect: sample recorded",
 		slog.String("container", name),
-		slog.String("image", c.Image),
-		slog.String("cpu_pct", pct(cpuFrac)),
-		slog.String("mem_pct", pct(memFrac)),
+		slog.String("dominant", fused.DominantSignal),
+		slog.String("arr", pct(fused.ArrivalRate)),
+		slog.String("srv", pct(fused.ServiceRate)),
+		slog.String("queue", pct(fused.QueueLength)),
 	)
 }
 
@@ -248,7 +292,7 @@ func shortID(id string) string {
 	return id
 }
 
-// pct formats a [0,1] fraction as "XX.X%" for debug log output.
+// pct formats a fraction as "XX.X%" for debug log output.
 func pct(f float64) string {
 	v := f * 100
 	if v < 0 {
