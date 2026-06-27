@@ -310,7 +310,7 @@ func (ab *AdaptiveBaseline) GetMemoryThreshold() float64 {
 	defer ab.mu.RUnlock()
 	t := ab.memoryStats.Threshold(3.0)
 	if t < 0 {
-		return 0.6
+		return 0.35
 	}
 	return t
 }
