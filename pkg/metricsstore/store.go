@@ -9,9 +9,13 @@ import (
 // NodeSample is a single observation of a service node's queue metrics.
 // Populated by the Prometheus poller or the /ingest REST endpoint.
 type NodeSample struct {
-	ArrivalRate float64
-	ServiceRate float64
-	QueueLength float64
+	ArrivalRate     float64
+	ServiceRate     float64
+	QueueLength     float64
+	ComputePressure float64
+	MemoryPressure  float64
+	NetworkPressure float64
+	DominantSignal  string
 	Timestamp   float64   // unix seconds (float for pipeline compatibility)
 	WallTime    time.Time // wall-clock time for human logging
 }
