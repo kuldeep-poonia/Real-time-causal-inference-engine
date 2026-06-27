@@ -18,6 +18,7 @@ type NodeState struct {
 	QueueLength     float64 // L (M/M/1)
 	ProcessingDelay float64 // W (M/M/1)
 	Timestamp       float64
+	DominantSignal  string
 
 	// Kingman Burst-Aware Variables
 	ArrivalCV2             float64 // C_A^2
