@@ -306,6 +306,12 @@ type AnalysisResponse struct {
 	Summary         string             `json:"summary,omitempty"`
 	ExecutionTimeMS float64            `json:"execution_time_ms"`
 
+	// Core pressure metrics requested by Integration Tests
+	ComputePressure   float64 `json:"compute_pressure"`
+	MemoryPressure    float64 `json:"memory_pressure"`
+	NetworkPressure   float64 `json:"network_pressure"`
+	DominantSignal    string  `json:"dominant_signal"`
+
 	// Top-level safety fields — required by the API contract for every
 	// analysis response. These are the primary safety surface that clients
 	// and automated consumers check before acting on results.
@@ -786,6 +792,13 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Narrative:           narrative,
 		Evidence:            sem.Evidence,
 		Remediation:         sem.Remediation,
+	}
+
+	if sample, ok := globalStore.GetLatestSample(nodeID); ok {
+		resp.ComputePressure = sample.ComputePressure
+		resp.MemoryPressure = sample.MemoryPressure
+		resp.NetworkPressure = sample.NetworkPressure
+		resp.DominantSignal = sample.DominantSignal
 	}
 
 	resp.RootCause = result.PrimaryRootCause()
