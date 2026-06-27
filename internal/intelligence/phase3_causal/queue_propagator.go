@@ -345,6 +345,18 @@ func FindRootCauseByPropagation(
 				score *= 0.5 // penalize if path didn't reach target
 			}
 
+			if state.DominantSignal == "network" {
+				// Network faults propagate upstream
+				// boost upstream neighbor scores by 1.3x
+				score *= 1.3
+			} else if state.DominantSignal == "memory" {
+				// Memory faults are local
+				// boost local node score by 1.5x
+				score *= 1.5
+			} else if state.DominantSignal == "compute" {
+				// Existing behavior — no change
+			}
+
 			results = append(results, RootCauseResult{
 				NodeID:              f.nodeID,
 				Score:               score,
