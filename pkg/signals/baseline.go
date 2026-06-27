@@ -75,9 +75,20 @@ type AdaptiveBaseline struct {
 	computePressures  []float64
 	memoryPressures   []float64
 	networkPressures  []float64
-	serviceRates      []float64
 	cpuFractions      []float64
 	throttleFractions []float64
+
+	// Service capacity rolling window
+	serviceRates []float64
+
+	// Page-Hinkley State (Memory)
+	phMean   float64
+	phCumSum float64
+	phCount  float64
+
+	// EWMA State (Memory Faults)
+	ewmaValue float64
+	ewmaMean  float64
 
 	// MaxBandwidth requires 10 intervals of bytes delta
 	networkBytesDeltas []uint64
@@ -129,6 +140,52 @@ func (ab *AdaptiveBaseline) UpdateMemoryStats(stats *docker.StatsResponse) *dock
 	prev := ab.previousMemoryStats
 	ab.previousMemoryStats = stats
 	return prev
+}
+
+// ComputeMemoryPressure applies the composite Page-Hinkley and EWMA logic to return a unified score.
+func (ab *AdaptiveBaseline) ComputeMemoryPressure(growthRateMBps, faultRatePerSec float64) float64 {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+
+	// --- Signal 1: Page-Hinkley on Memory Growth Rate ---
+	ab.phCount++
+	
+	// Welford mean update for growth rate
+	ab.phMean = ab.phMean + (growthRateMBps - ab.phMean) / ab.phCount
+	
+	delta := 0.005
+	d_t := growthRateMBps - ab.phMean - delta
+	
+	ab.phCumSum = math.Max(0, ab.phCumSum + d_t)
+	
+	phScore := ab.phCumSum / (ab.phCumSum + 1.0)
+	
+	// Reset/decay logic
+	if phScore < 0.1 {
+		ab.phCumSum *= 0.95
+	}
+	
+	// Cold start guard
+	if ab.phCount < 3 {
+		phScore = 0.0
+	}
+	
+	// --- Signal 2: EWMA on Page Fault Rate ---
+	lambda := 0.3
+	ab.ewmaValue = lambda * faultRatePerSec + (1.0 - lambda) * ab.ewmaValue
+	
+	// EWMA baseline (Welford on EWMA value)
+	if ab.ewmaValue == 0 && faultRatePerSec == 0 && ab.ewmaMean == 0 {
+		ab.ewmaMean = 0.001 // seed to prevent division by zero
+	}
+	
+	ab.ewmaMean = ab.ewmaMean + (ab.ewmaValue - ab.ewmaMean) / ab.phCount // Using same count
+	
+	anomalyRatio := ab.ewmaValue / (ab.ewmaMean + 0.001)
+	ewmaScore := math.Min(anomalyRatio / 10.0, 1.0)
+	
+	// --- Composite Score ---
+	return (0.6 * phScore) + (0.4 * ewmaScore)
 }
 
 // RecordNetworkBytesDelta adds a network bytes delta to the 10-interval rolling window.

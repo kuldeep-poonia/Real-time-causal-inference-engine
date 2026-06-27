@@ -20,13 +20,8 @@ func FuseSignals(compute ComputeSignal, memory MemorySignal, net NetworkSignal, 
 
 	computePressure := compute.CPUFraction + (compute.ThrottleFraction * alpha)
 	
-	// Normalize: cap page fault amplification at 2.0x max
-	// Based on MicroRCA paper — faults beyond 10/sec represent full memory thrashing
-	faultAmplifier := memory.MajorPageFaultRate / 10.0
-	if faultAmplifier > 1.0 {
-		faultAmplifier = 1.0
-	}
-	memoryPressure := (memory.WorkingSet / memory.Limit) * (1.0 + faultAmplifier)
+	// Compute composite Page-Hinkley and EWMA score for memory anomaly
+	memoryPressure := baseline.ComputeMemoryPressure(memory.GrowthRateMBps, memory.FaultRatePerSec)
 
 	// Record network bytes delta for MaxBandwidth rolling window
 	totalBytesDelta := net.RxBytesDelta + net.TxBytesDelta

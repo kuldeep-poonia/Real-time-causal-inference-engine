@@ -9,6 +9,9 @@ type MemorySignal struct {
 	WorkingSet         float64
 	Limit              float64
 	MajorPageFaultRate float64
+	TimeDeltaSeconds   float64
+	GrowthRateMBps     float64
+	FaultRatePerSec    float64
 }
 
 // CollectMemory extracts working set and page fault metrics from Docker stats.
@@ -56,9 +59,29 @@ func CollectMemory(cur *docker.StatsResponse, prev *docker.StatsResponse, timeDe
 		}
 	}
 
+	growthRateMBps := 0.0
+	if prev != nil && timeDeltaSeconds > 0 {
+		prevWorkingSet := 0.0
+		if v, ok := prev.MemoryStats.Stats["active_anon"]; ok {
+			prevWorkingSet = float64(v)
+		} else {
+			prevCache := uint64(0)
+			if v, ok := prev.MemoryStats.Stats["cache"]; ok {
+				prevCache = v
+			}
+			if prev.MemoryStats.Usage > prevCache {
+				prevWorkingSet = float64(prev.MemoryStats.Usage - prevCache)
+			}
+		}
+		growthRateMBps = (workingSet - prevWorkingSet) / timeDeltaSeconds / (1024.0 * 1024.0)
+	}
+
 	return MemorySignal{
 		WorkingSet:         workingSet,
 		Limit:              limit,
 		MajorPageFaultRate: majorPageFaultRate,
+		TimeDeltaSeconds:   timeDeltaSeconds,
+		GrowthRateMBps:     growthRateMBps,
+		FaultRatePerSec:    majorPageFaultRate,
 	}
 }
