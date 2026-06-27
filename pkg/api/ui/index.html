@@ -532,8 +532,11 @@
                     document.getElementById('res-service').textContent = cleanName(semData.root_cause || analysisData.root_cause);
                     document.getElementById('res-certainty').textContent = (semData.confidence_score * 100).toFixed(0) + '%';
                     
-                    document.getElementById('res-what').textContent = (semData.narrative && semData.narrative.length > 0) ? semData.narrative[0] : 'Anomaly detected in service.';
-                    document.getElementById('res-why').textContent = (semData.narrative && semData.narrative.length > 1) ? semData.narrative[1] : 'Could affect downstream services.';
+                    let whatStr = (semData.narrative && semData.narrative.length > 0) ? semData.narrative[0] : 'Anomaly detected in service.';
+                    let whyStr = (semData.narrative && semData.narrative.length > 1) ? semData.narrative[1] : 'Could affect downstream services.';
+                    
+                    document.getElementById('res-what').textContent = whatStr.replace(/^What is happening:\s*/i, '');
+                    document.getElementById('res-why').textContent = whyStr.replace(/^Why it matters:\s*/i, '');
                     
                     let todoText = "Review service logs.";
                     if (semData.remediation && semData.remediation.length > 0) {
