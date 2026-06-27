@@ -3,90 +3,580 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Diagnostics</title>
-    <link rel="stylesheet" href="app.css">
-    <!-- Google Fonts -->
+    <title>ABSIA Overview</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --apple-blue: #007AFF;
+            --apple-green: #34C759;
+            --apple-orange: #FF9500;
+            --apple-red: #FF3B30;
+            --apple-gray: #8E8E93;
+            --bg-color: #F2F2F7;
+            --card-bg: #FFFFFF;
+            --text-primary: #1C1C1E;
+            --text-secondary: #8E8E93;
+            --border-color: #E5E5EA;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Ubuntu, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            background-color: var(--card-bg);
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .logo { font-size: 20px; font-weight: 700; color: var(--apple-blue); }
+        .last-updated { font-size: 14px; color: var(--text-secondary); }
+
+        /* Container */
+        .container { max-width: 1200px; margin: 32px auto; padding: 0 20px; }
+
+        /* Summary Cards */
+        .summary-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .summary-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        .summary-title { font-size: 13px; color: var(--text-secondary); font-weight: 500; margin-bottom: 4px; }
+        .summary-value { font-size: 24px; font-weight: 700; }
+        .val-total { color: var(--text-primary); }
+        .val-healthy { color: var(--apple-green); }
+        .val-attention { color: var(--apple-orange); }
+        .val-critical { color: var(--apple-red); }
+
+        /* Services Grid */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+        }
+        .service-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            cursor: pointer;
+            transition: transform 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .service-card:hover { transform: translateY(-2px); }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .service-name { font-size: 14px; font-weight: 600; }
+        .sample-count { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        
+        .badge {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        .bar-container { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+        .bar-label { width: 85px; color: var(--text-secondary); }
+        .bar-track { flex-grow: 1; height: 8px; background: #E5E5EA; border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s, background-color 0.3s; }
+        
+        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-color); }
+        .problem-tag { font-size: 11px; font-weight: 500; background: #F2F2F7; padding: 4px 6px; border-radius: 6px; color: var(--text-primary); }
+        
+        canvas.sparkline { width: 50px; height: 25px; }
+
+        /* Side Panel */
+        .overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 99; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .overlay.active { opacity: 1; pointer-events: auto; }
+        
+        .side-panel {
+            position: fixed; top: 0; right: -500px; width: 100%; max-width: 500px; height: 100vh;
+            background: var(--card-bg); z-index: 100;
+            box-shadow: -4px 0 16px rgba(0,0,0,0.1);
+            transition: right 0.3s ease;
+            display: flex; flex-direction: column;
+        }
+        .side-panel.active { right: 0; }
+        
+        .panel-header {
+            padding: 24px; border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .panel-title { font-size: 20px; font-weight: 600; }
+        .btn-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+        
+        .panel-body { padding: 24px; overflow-y: auto; flex-grow: 1; }
+        
+        .meters-box { background: #F2F2F7; padding: 16px; border-radius: 12px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 12px; }
+        .meter-row { display: flex; font-family: monospace; font-size: 14px; justify-content: space-between; }
+        .meter-label { width: 130px; }
+        .meter-bar { flex-grow: 1; color: var(--text-secondary); letter-spacing: 2px; }
+        .meter-pct { width: 40px; text-align: right; }
+        
+        .btn-run {
+            width: 100%; padding: 14px; background: var(--apple-blue); color: white;
+            border: none; border-radius: 12px; font-size: 16px; font-weight: 600;
+            cursor: pointer; margin-bottom: 24px; transition: background 0.2s;
+        }
+        .btn-run:hover { background: #0066CC; }
+        .btn-run:disabled { background: var(--apple-gray); cursor: not-allowed; }
+        
+        /* Analysis Results */
+        .loading { display: none; text-align: center; color: var(--text-secondary); margin: 20px 0; }
+        .results-box { display: none; }
+        
+        .orange-box {
+            background: #FFF3E0; border: 1px solid #FF9500; border-radius: 12px;
+            padding: 16px; color: #E65100; font-weight: 500; margin-bottom: 20px;
+        }
+        
+        .result-card { border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+        .result-header { font-size: 18px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .result-item { margin-bottom: 16px; }
+        .result-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px; }
+        .result-text { font-size: 15px; }
+        
+        /* Explore Box */
+        .explore-box { margin-top: 32px; border-top: 1px solid var(--border-color); padding-top: 24px; }
+        .explore-input {
+            width: 100%; padding: 12px; border: 1px solid var(--border-color);
+            border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 12px;
+        }
+        .explore-answer { font-size: 14px; color: var(--text-primary); background: #F2F2F7; padding: 12px; border-radius: 8px; display: none; }
+
+    </style>
 </head>
 <body>
-    <header class="top-nav">
-        <div class="logo">System Diagnostics Platform</div>
-        
-        <div class="header-stats">
-            <span class="stat-item" id="header-time">--:-- --</span>
-            <span class="stat-divider">|</span>
-            <span class="stat-item" id="header-active-nodes">0 Services</span>
-            <span class="stat-divider">|</span>
-            <div class="health-status" id="health-status-badge">
-                Checking Health...
+
+    <div class="top-bar">
+        <div class="logo">ABSIA</div>
+        <div class="last-updated" id="last-updated">Updating...</div>
+    </div>
+
+    <div class="container">
+        <div class="summary-row">
+            <div class="summary-card">
+                <div class="summary-title">Total Services</div>
+                <div class="summary-value val-total" id="sum-total">0</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Healthy</div>
+                <div class="summary-value val-healthy" id="sum-healthy">0</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Need Attention</div>
+                <div class="summary-value val-attention" id="sum-attention">0</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Critical</div>
+                <div class="summary-value val-critical" id="sum-critical">0</div>
             </div>
         </div>
-    </header>
 
-    <main class="container">
-        <!-- Sidebar for nodes -->
-        <aside class="sidebar">
-            <h2>Active Services</h2>
-            <p class="subtitle">Select a service to run diagnostics</p>
-            <div id="nodes-list" class="nodes-list">
-                <div class="loading-text">Loading services...</div>
+        <div class="services-grid" id="services-grid">
+            <!-- Cards injected via JS -->
+        </div>
+    </div>
+
+    <!-- Slide-in Panel -->
+    <div id="overlay" class="overlay"></div>
+    <div id="side-panel" class="side-panel">
+        <div class="panel-header">
+            <div>
+                <div class="panel-title" id="panel-title">Service</div>
+                <div id="panel-badge" class="badge" style="margin-top: 8px; display: inline-block;"></div>
             </div>
-        </aside>
-
-        <!-- Main content area for diagnostics -->
-        <section class="diagnostic-panel">
-            <div id="welcome-message" class="state-message">
-                <h2>Ready for Analysis</h2>
-                <p>Select a service from the left to diagnose performance issues.</p>
-            </div>
-
-            <div id="loading-spinner" class="state-message hidden">
-                <div class="spinner"></div>
-                <h2>Running Diagnostics...</h2>
-                <p>Analyzing health, load, and dependencies.</p>
-            </div>
-
-            <div id="diagnostic-results" class="results-container hidden">
-                <div class="result-header">
-                    <h2 id="result-title">Service Analysis</h2>
-                    <span id="result-confidence" class="confidence-badge"></span>
-                </div>
-                
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <h3>Current Load</h3>
-                        <div class="metric-value" id="metric-load">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <h3>Expected Load</h3>
-                        <div class="metric-value" id="metric-expected">-</div>
-                    </div>
-                </div>
-
-                <div class="analysis-section hidden" id="section-explanation">
-                    <h3>Incident Explanation</h3>
-                    <div id="explanation-text" class="explanation-text"></div>
-                    <ul id="explanation-narrative" class="insight-list" style="margin-top:1rem;"></ul>
-                </div>
-
-                <div class="analysis-section" id="section-causes">
-                    <h3>Identified Issues</h3>
-                    <ul id="list-causes" class="insight-list"></ul>
-                </div>
-
-                <div class="analysis-section hidden" id="section-actions">
-                    <h3>Recommended Actions</h3>
-                    <ul id="list-actions" class="insight-list"></ul>
-                </div>
-            </div>
+            <button class="btn-close" id="btn-close">&times;</button>
+        </div>
+        <div class="panel-body">
             
-            <div id="waiting-data" class="state-message hidden">
-                <h2>Waiting for Data</h2>
-                <p>The system is collecting data. Please ensure the service is active.</p>
+            <div class="meters-box">
+                <div class="meter-row">
+                    <div class="meter-label">CPU Stress:</div>
+                    <div class="meter-bar" id="meter-cpu"></div>
+                    <div class="meter-pct" id="meter-cpu-pct">0%</div>
+                </div>
+                <div class="meter-row">
+                    <div class="meter-label">Memory Stress:</div>
+                    <div class="meter-bar" id="meter-mem"></div>
+                    <div class="meter-pct" id="meter-mem-pct">0%</div>
+                </div>
+                <div class="meter-row">
+                    <div class="meter-label">Network Stress:</div>
+                    <div class="meter-bar" id="meter-net"></div>
+                    <div class="meter-pct" id="meter-net-pct">0%</div>
+                </div>
             </div>
-        </section>
-    </main>
 
-    <script src="app.js"></script>
+            <button class="btn-run" id="btn-run">Run Diagnosis</button>
+
+            <div id="panel-loading" class="loading">Analyzing telemetry...</div>
+            
+            <div id="panel-results" class="results-box">
+                <div id="orange-box" class="orange-box" style="display:none;">
+                    Still collecting data. Check back in 60 seconds.
+                </div>
+                <div id="result-content" class="result-card" style="display:none;">
+                    <div class="result-header">🔍 Root Cause Found</div>
+                    
+                    <div class="result-item">
+                        <div class="result-label">Service</div>
+                        <div class="result-text" id="res-service"></div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">Certainty</div>
+                        <div class="result-text" id="res-certainty"></div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">What's happening:</div>
+                        <div class="result-text" id="res-what"></div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">Why it matters:</div>
+                        <div class="result-text" id="res-why"></div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">What to do:</div>
+                        <div class="result-text" id="res-todo"></div>
+                    </div>
+                </div>
+
+                <div class="explore-box">
+                    <div class="result-label">Explore Incident</div>
+                    <form id="explore-form">
+                        <input type="text" id="explore-input" class="explore-input" placeholder="Ask a question about this incident..." autocomplete="off">
+                    </form>
+                    <div id="explore-answer" class="explore-answer"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Data stores
+        let sparkData = {}; 
+        let currentNodeId = null;
+        let lastNodes = [];
+
+        // Utilities
+        function cleanName(id) {
+            if (!id) return "Unknown";
+            return id
+                .replace('docker-compose-', '')
+                .replace(/-\d+$/, '')
+                .replace(/-/g, ' ')
+                .split(' ')
+                .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(' ');
+        }
+
+        function translateSignal(signal) {
+            const map = {
+                "compute_pressure": "CPU Stress",
+                "memory_pressure": "Memory Stress",
+                "network_pressure": "Network Stress"
+            };
+            return map[signal] || signal || "None";
+        }
+
+        function getStatusColor(status) {
+            status = (status || "healthy").toLowerCase();
+            if (status === 'watch') return 'var(--apple-blue)';
+            if (status === 'pressure') return 'var(--apple-orange)';
+            if (status === 'overloaded' || status === 'critical') return 'var(--apple-red)';
+            return 'var(--apple-green)';
+        }
+
+        function getStatusLabel(status) {
+            status = (status || "healthy").toLowerCase();
+            if (status === 'healthy') return 'Healthy';
+            if (status === 'watch') return 'Watch';
+            if (status === 'pressure') return 'Pressure';
+            return 'Critical';
+        }
+
+        function getBarColor(val) {
+            if (val > 0.7) return 'var(--apple-red)';
+            if (val > 0.3) return 'var(--apple-orange)';
+            return 'var(--apple-green)';
+        }
+
+        function buildMeterString(val) {
+            // [████████░░] 
+            let pct = Math.min(100, Math.max(0, val * 100));
+            let blocks = Math.round(pct / 10);
+            let fill = '█'.repeat(blocks);
+            let empty = '░'.repeat(10 - blocks);
+            return `[${fill}${empty}]`;
+        }
+
+        function drawSparkline(canvasId, data, color) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.clearRect(0, 0, w, h);
+            if (!data || data.length < 2) return;
+
+            const max = Math.max(...data, 1.0);
+            const step = w / (data.length - 1);
+            
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            for (let i = 0; i < data.length; i++) {
+                const x = i * step;
+                const y = h - ((data[i] / max) * h);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        // Fetch & Render loop
+        async function fetchNodes() {
+            try {
+                const res = await fetch('/nodes');
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                const d = new Date();
+                document.getElementById('last-updated').textContent = `Last updated: ${d.toLocaleTimeString()}`;
+                
+                if (data.nodes) {
+                    lastNodes = data.nodes;
+                    updateDashboard(data.nodes);
+                }
+            } catch (e) {
+                console.error("Polling failed:", e);
+            }
+        }
+
+        function updateDashboard(nodes) {
+            let healthy = 0, attention = 0, critical = 0;
+            const grid = document.getElementById('services-grid');
+            grid.innerHTML = '';
+
+            nodes.forEach(node => {
+                // Tracking sparkline data
+                if (!sparkData[node.node_id]) sparkData[node.node_id] = [];
+                sparkData[node.node_id].push(node.compute_pressure || 0);
+                if (sparkData[node.node_id].length > 15) sparkData[node.node_id].shift();
+
+                // Summary counting
+                let s = (node.status || "healthy").toLowerCase();
+                if (s === 'healthy') healthy++;
+                else if (s === 'overloaded') critical++;
+                else attention++;
+
+                // Build Card
+                const card = document.createElement('div');
+                card.className = 'service-card';
+                card.onclick = () => openPanel(node.node_id);
+                
+                let sColor = getStatusColor(s);
+                let sLabel = getStatusLabel(s);
+                let cName = cleanName(node.node_id);
+                
+                let cpuPct = Math.min(100, (node.compute_pressure || 0) * 100).toFixed(0);
+                let memPct = Math.min(100, (node.memory_pressure || 0) * 100).toFixed(0);
+                let cpuColor = getBarColor(node.compute_pressure || 0);
+                let memColor = getBarColor(node.memory_pressure || 0);
+
+                let sampleText = (node.sample_count < 4) ? `Warming up... (${node.sample_count}/4)` : "Live data";
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div>
+                            <div class="service-name">${cName}</div>
+                            <div class="sample-count">${sampleText}</div>
+                        </div>
+                        <div class="badge" style="background-color: ${sColor}">${sLabel}</div>
+                    </div>
+                    
+                    <div class="bar-container">
+                        <div class="bar-label">CPU Stress</div>
+                        <div class="bar-track"><div class="bar-fill" style="width: ${cpuPct}%; background-color: ${cpuColor}"></div></div>
+                    </div>
+                    <div class="bar-container">
+                        <div class="bar-label">Memory Stress</div>
+                        <div class="bar-track"><div class="bar-fill" style="width: ${memPct}%; background-color: ${memColor}"></div></div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="problem-tag">Main Problem: ${translateSignal(node.dominant_signal)}</div>
+                        <canvas id="spark-${node.node_id}" class="sparkline" width="50" height="25"></canvas>
+                    </div>
+                `;
+                grid.appendChild(card);
+                
+                // We must draw canvas after appending
+                requestAnimationFrame(() => {
+                    drawSparkline(`spark-${node.node_id}`, sparkData[node.node_id], sColor);
+                });
+            });
+
+            // Update top cards
+            document.getElementById('sum-total').textContent = nodes.length;
+            document.getElementById('sum-healthy').textContent = healthy;
+            document.getElementById('sum-attention').textContent = attention;
+            document.getElementById('sum-critical').textContent = critical;
+        }
+
+        // Side Panel Interaction
+        const panel = document.getElementById('side-panel');
+        const overlay = document.getElementById('overlay');
+        
+        document.getElementById('btn-close').onclick = closePanel;
+        overlay.onclick = closePanel;
+
+        function closePanel() {
+            panel.classList.remove('active');
+            overlay.classList.remove('active');
+            currentNodeId = null;
+        }
+
+        function openPanel(nodeId) {
+            currentNodeId = nodeId;
+            const node = lastNodes.find(n => n.node_id === nodeId);
+            if (!node) return;
+
+            document.getElementById('panel-title').textContent = cleanName(node.node_id);
+            const badge = document.getElementById('panel-badge');
+            badge.textContent = getStatusLabel(node.status);
+            badge.style.backgroundColor = getStatusColor(node.status);
+
+            document.getElementById('meter-cpu').textContent = buildMeterString(node.compute_pressure || 0);
+            document.getElementById('meter-cpu-pct').textContent = Math.min(100, (node.compute_pressure||0)*100).toFixed(0) + '%';
+            document.getElementById('meter-mem').textContent = buildMeterString(node.memory_pressure || 0);
+            document.getElementById('meter-mem-pct').textContent = Math.min(100, (node.memory_pressure||0)*100).toFixed(0) + '%';
+            document.getElementById('meter-net').textContent = buildMeterString(node.network_pressure || 0);
+            document.getElementById('meter-net-pct').textContent = Math.min(100, (node.network_pressure||0)*100).toFixed(0) + '%';
+
+            // Reset results area
+            document.getElementById('panel-results').style.display = 'none';
+            document.getElementById('explore-answer').style.display = 'none';
+            document.getElementById('explore-input').value = '';
+
+            overlay.classList.add('active');
+            panel.classList.add('active');
+        }
+
+        document.getElementById('btn-run').onclick = async () => {
+            if (!currentNodeId) return;
+            const btn = document.getElementById('btn-run');
+            const loading = document.getElementById('panel-loading');
+            const results = document.getElementById('panel-results');
+            const orangeBox = document.getElementById('orange-box');
+            const resultContent = document.getElementById('result-content');
+
+            btn.disabled = true;
+            results.style.display = 'none';
+            loading.style.display = 'block';
+
+            try {
+                // 1. Trigger Analysis
+                const res = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ node_id: currentNodeId })
+                });
+                const analysisData = await res.json();
+
+                // 2. Fetch Semantics (RULE 9)
+                const semRes = await fetch('/semantics');
+                const semData = await semRes.json();
+
+                loading.style.display = 'none';
+                results.style.display = 'block';
+
+                if (analysisData.fallback_triggered) {
+                    orangeBox.style.display = 'block';
+                    resultContent.style.display = 'none';
+                } else {
+                    orangeBox.style.display = 'none';
+                    resultContent.style.display = 'block';
+
+                    document.getElementById('res-service').textContent = cleanName(semData.root_cause || analysisData.root_cause);
+                    document.getElementById('res-certainty').textContent = (semData.confidence_score * 100).toFixed(0) + '%';
+                    
+                    document.getElementById('res-what').textContent = (semData.narrative && semData.narrative.length > 0) ? semData.narrative[0] : 'Anomaly detected in service.';
+                    document.getElementById('res-why').textContent = (semData.narrative && semData.narrative.length > 1) ? semData.narrative[1] : 'Could affect downstream services.';
+                    
+                    let todoText = "Review service logs.";
+                    if (semData.remediation && semData.remediation.length > 0) {
+                        todoText = semData.remediation.map(r => r.action_type || r.Action || "Review service logs").join(". ");
+                    }
+                    document.getElementById('res-todo').textContent = todoText;
+                }
+            } catch (e) {
+                console.error(e);
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+            btn.disabled = false;
+        };
+
+        // Explore functionality (RULE 10)
+        document.getElementById('explore-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('explore-input');
+            const ansBox = document.getElementById('explore-answer');
+            const q = input.value.trim();
+            if (!q) return;
+
+            ansBox.style.display = 'block';
+            ansBox.textContent = "Thinking...";
+
+            try {
+                const res = await fetch('/explore', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ question: q })
+                });
+                const data = await res.json();
+                ansBox.textContent = data.Answer || data.answer || "No response generated.";
+            } catch (err) {
+                ansBox.textContent = "Error reaching explore endpoint.";
+            }
+        };
+
+        // Initial Boot
+        fetchNodes();
+        setInterval(fetchNodes, 10000); // Poll every 10s
+
+    </script>
 </body>
 </html>
