@@ -16,10 +16,21 @@ type Container struct {
 // StatsResponse is the response from GET /containers/{id}/stats?stream=false.
 // Only fields required for CPU% and memory% calculation are declared.
 type StatsResponse struct {
-	Read        string   `json:"read"`
-	CPUStats    CPUStats `json:"cpu_stats"`
-	PreCPUStats CPUStats `json:"precpu_stats"`
-	MemoryStats MemStats `json:"memory_stats"`
+	Read        string                  `json:"read"`
+	CPUStats    CPUStats                `json:"cpu_stats"`
+	PreCPUStats CPUStats                `json:"precpu_stats"`
+	MemoryStats MemStats                `json:"memory_stats"`
+	Networks    map[string]NetworkStats `json:"networks"`
+}
+
+// NetworkStats holds network accounting data from Docker stats endpoint.
+type NetworkStats struct {
+	RxBytes   uint64 `json:"rx_bytes"`
+	TxBytes   uint64 `json:"tx_bytes"`
+	RxPackets uint64 `json:"rx_packets"`
+	TxPackets uint64 `json:"tx_packets"`
+	RxDropped uint64 `json:"rx_dropped"`
+	TxDropped uint64 `json:"tx_dropped"`
 }
 
 // CPUStats holds CPU accounting data from the Docker stats endpoint.
@@ -30,6 +41,10 @@ type CPUStats struct {
 	} `json:"cpu_usage"`
 	SystemCPUUsage uint64 `json:"system_cpu_usage"`
 	OnlineCPUs     int    `json:"online_cpus"` // 0 on older daemons; fall back to len(PercpuUsage)
+	ThrottlingData struct {
+		Periods          uint64 `json:"periods"`
+		ThrottledPeriods uint64 `json:"throttled_periods"`
+	} `json:"throttling_data"`
 }
 
 // MemStats holds memory accounting data from the Docker stats endpoint.
