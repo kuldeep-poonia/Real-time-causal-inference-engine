@@ -376,9 +376,13 @@ type NodeSnapshot struct {
 	NodeID        string  `json:"node_id"`
 	ContainerName string  `json:"container_name,omitempty"`
 	Image         string  `json:"image,omitempty"`
-	ArrivalRate   float64 `json:"arrival_rate"`
-	ServiceRate   float64 `json:"service_rate"`
-	QueueLength   float64 `json:"queue_length"`
+	ArrivalRate     float64 `json:"arrival_rate"`
+	ServiceRate     float64 `json:"service_rate"`
+	QueueLength     float64 `json:"queue_length"`
+	ComputePressure float64 `json:"compute_pressure"`
+	MemoryPressure  float64 `json:"memory_pressure"`
+	NetworkPressure float64 `json:"network_pressure"`
+	DominantSignal  string  `json:"dominant_signal"`
 	Load          float64 `json:"load"`
 	SampleCount   int     `json:"sample_count"`
 	PipelineReady bool    `json:"pipeline_ready"`
@@ -620,9 +624,13 @@ func NodesHandler(w http.ResponseWriter, r *http.Request) {
 			NodeID:        id,
 			ContainerName: cname,
 			Image:         cimage,
-			ArrivalRate:   sample.ArrivalRate,
-			ServiceRate:   sample.ServiceRate,
-			QueueLength:   sample.QueueLength,
+			ArrivalRate:     sample.ArrivalRate,
+			ServiceRate:     sample.ServiceRate,
+			QueueLength:     sample.QueueLength,
+			ComputePressure: sample.ComputePressure,
+			MemoryPressure:  sample.MemoryPressure,
+			NetworkPressure: sample.NetworkPressure,
+			DominantSignal:  sample.DominantSignal,
 			Load:          load,
 			SampleCount:   count,
 			PipelineReady: count >= 4,
