@@ -422,6 +422,7 @@ func ExecuteFullPipelineFromStore(
 					ArrivalRate: sample.ArrivalRate, ServiceRate: sr,
 					Load: sample.ArrivalRate / sr, QueueLength: sample.QueueLength,
 					Timestamp: node.State.Timestamp,
+					DominantSignal: sample.DominantSignal,
 				}
 			}
 			if ns.ServiceRate <= 0 {
@@ -429,6 +430,7 @@ func ExecuteFullPipelineFromStore(
 					ArrivalRate: 0.5, ServiceRate: 1.0,
 					Load: 0.5, QueueLength: 0,
 					Timestamp: node.State.Timestamp,
+					DominantSignal: "none",
 				}
 			}
 			node.State = ns
