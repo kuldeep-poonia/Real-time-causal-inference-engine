@@ -1,13 +1,13 @@
-version: '3.8'
+
 
 
 services:
   absia:
     image: absia:latest
-    # To build locally instead:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    # Build locally instead of using pre-built image:
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - "8080:8080"
