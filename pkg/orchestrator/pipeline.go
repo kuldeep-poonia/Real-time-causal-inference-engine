@@ -847,7 +847,7 @@ func buildLocalPhysicsRoot(
 	queueLength := math.Max(0, state.QueueLength)
 	load := state.Load
 
-	if load < 0.85 && queueLength < 100 {
+	if load < 0.85 && queueLength < 100 && state.DominantSignal != "memory" && state.DominantSignal != "network" {
 		return phase3.RootCauseResult{}, false
 	}
 
@@ -855,6 +855,16 @@ func buildLocalPhysicsRoot(
 	pressureScore := math.Max(0, load-0.85)
 	queueScore := math.Min(math.Log1p(queueLength)/10.0, 1.5)
 	score := overloadScore + pressureScore + queueScore
+
+	if state.DominantSignal == "network" {
+		// Network pressure is bounded 0-1.0, treat it as a direct score addition
+		score += queueLength * 0.4
+		score *= 1.3
+	} else if state.DominantSignal == "memory" {
+		// Memory pressure is bounded 0-2.0, treat it as a direct score addition
+		score += queueLength * 0.4
+		score *= 1.5
+	}
 
 	chain := &phase3.PropagationChain{
 		RootNode:          nodeID,
