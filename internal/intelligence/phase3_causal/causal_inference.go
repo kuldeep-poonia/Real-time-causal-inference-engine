@@ -342,27 +342,27 @@ func computeTemporalCausality(x, y []float64) float64 {
 
 	best := 0.0
 
-	for lag := 1; lag <= 2; lag++ {
-	forward := pearsonLagged(x, y, lag)
-	reverse := pearsonLagged(y, x, lag)
+	for lag := 0; lag <= 2; lag++ {
+		forward := pearsonLagged(x, y, lag)
+		reverse := pearsonLagged(y, x, lag)
 
-	fAbs := math.Abs(forward)
-	rAbs := math.Abs(reverse)
+		fAbs := math.Abs(forward)
+		rAbs := math.Abs(reverse)
 
-	// allow weak signals (stable systems)
-	if fAbs < 0.01 {
-		continue
+		// allow weak signals (stable systems)
+		if fAbs < 0.01 {
+			continue
+		}
+
+		// enforce directionality (but allow identical/symmetric signals for lag=0)
+		if fAbs < rAbs {
+			continue
+		}
+
+		if fAbs > best {
+			best = fAbs
+		}
 	}
-
-	// enforce directionality (but allow close signals)
-	if fAbs <= rAbs {
-		continue
-	}
-
-	if fAbs > best {
-		best = fAbs
-	}
-}
 
 return best
 }

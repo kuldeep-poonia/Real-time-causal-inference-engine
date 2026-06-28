@@ -201,26 +201,25 @@ func evaluateGraph(
 
 	var score float64
 
+	resMap := make(map[string]InterventionResult, len(results))
 	for _, r := range results {
+		resMap[r.From+"->"+r.To] = r
+	}
 
-		for _, e := range graph.Edges {
+	for _, e := range graph.Edges {
+		if r, ok := resMap[e.From+"->"+e.To]; ok {
 
-			if e.From == r.From && e.To == r.To {
+			temporal := computeTemporalCausality(e.SourceSeries, e.TargetSeries)
 
-				// ✅ ADD THIS ABOVE contrib
-temporal := computeTemporalCausality(e.SourceSeries, e.TargetSeries)
+			contrib := e.ExistenceProb *
+				r.Effect *
+				(1.0 - e.Variance) *
+				temporal
 
-// ✅ NEW contrib
-contrib := e.ExistenceProb *
-	r.Effect *
-	(1.0 - e.Variance) *
-	temporal
-
-				if r.Valid {
-					score += contrib
-				} else {
-					score -= contrib
-				}
+			if r.Valid {
+				score += contrib
+			} else {
+				score -= contrib
 			}
 		}
 	}

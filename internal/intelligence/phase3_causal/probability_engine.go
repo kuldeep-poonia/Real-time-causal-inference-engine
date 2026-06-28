@@ -159,15 +159,11 @@ func alignWithLag(
 		// missed scrapes or jitter.  When both timestamps are zero (legacy
 		// or synthetic data without explicit timestamps), skip the check.
 		if !tA.IsZero() && !tB.IsZero() {
-			//diff := absDuration(tA.Sub(tB))
-			// The lag itself contributes a time difference; we only flag
-			// pairs whose residual beyond the lag window exceeds tol.
-			// Using diff directly (not diff-lag*step) is correct here:
-			// a[i].Time and b[i+lag].Time for same-series pairs differ by
-			// lag*stepSize; cross-series pairs from identical epochs also
-			// differ by exactly lag*stepSize.  Allowing up to tol=30s
-			// covers lag=1 (15s+15s slack) and lag=2 (30s+15s slack).
-			if tA.After(tB) { 
+			diff := tA.Sub(tB)
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > tol {
 				continue
 			}
 		}
