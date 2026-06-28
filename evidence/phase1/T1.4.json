@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-Id: d9467ac3e92681c3
+Date: Fri, 26 Jun 2026 10:43:37 GMT
+Content-Length: 127
+
+{"load":0.6666666666666666,"node_id":"test-manual-1","pipeline_ready":false,"sample_count":1,"status":"stored","success":true}

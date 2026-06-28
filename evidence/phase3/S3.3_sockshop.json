@@ -1,0 +1,85 @@
+{
+    "success": true,
+    "data_source": "real",
+    "actions_recommended": 0,
+    "patterns_detected": 2,
+    "summary": "[PIPELINE SUMMARY]\nPhase 1: rho=0.003 lambda=0.01 mu=2.49 source=real\nPhase 2: 2 patterns dynamics=stable divergence=0.012 features=true\nPhase 3: no root cause detected (stable system)\nSafety: state=UNKNOWN score=0.000 risk=HIGH fallback=true\n  fallback reasons: [LATENT_HIGH_RISK LOW_CONFIDENCE SEVERE_POSTERIOR_VARIANCE]\nExecutionTimeMS: 157.1\nErrors: [Phase 3: no lagged causal hypotheses; using queue-physics fallback when available]\n",
+    "execution_time_ms": 157.059795,
+    "confidence_score": 0,
+    "confidence_state": "UNKNOWN",
+    "latent_risk": "HIGH",
+    "fallback_triggered": true,
+    "safety": {
+        "confidence_score": 0,
+        "confidence_state": "UNKNOWN",
+        "latent_risk": "HIGH",
+        "fallback_triggered": true,
+        "fallback_reasons": [
+            "LATENT_HIGH_RISK",
+            "LOW_CONFIDENCE",
+            "SEVERE_POSTERIOR_VARIANCE"
+        ],
+        "probe_nodes": [
+            "docker-compose-front-end-1:residual_variance_decomposition"
+        ],
+        "posterior_variance": 1,
+        "posterior_precision": 0,
+        "determinism": 1
+    },
+    "operational_state": "UNSTABLE",
+    "incident_title": "docker-compose-front-end-1 needs help",
+    "failure_category": "Hidden Upstream Failure",
+    "confidence_narrative": "I cannot safely name one cause yet because most observed services are not represented in the current service map. Add service data for the missing services, then run the check again.",
+    "severity": 0.15,
+    "blast_radius": 0,
+    "timeline": [
+        "More proof is needed before naming one cause: LATENT_HIGH_RISK, LOW_CONFIDENCE, SEVERE_POSTERIOR_VARIANCE.",
+        "docker-compose-front-end-1: selected service may be affected by this issue."
+    ],
+    "narrative": [
+        "What is happening: docker-compose-front-end-1 is the service most likely starting the current problem.",
+        "How it appears to be happening: More proof is needed before naming one cause: LATENT_HIGH_RISK, LOW_CONFIDENCE, SEVERE_POSTERIOR_VARIANCE. docker-compose-front-end-1: selected service may be affected by this issue.",
+        "How to fix first: pause automated fixes. Reason: ABSIA is not sure enough yet.",
+        "Before acting: more proof is needed because LATENT_HIGH_RISK, LOW_CONFIDENCE, SEVERE_POSTERIOR_VARIANCE."
+    ],
+    "evidence": [
+        {
+            "metric": "dynamics",
+            "value": 0.012,
+            "interpretation": "recent service behavior is classified as stable"
+        },
+        {
+            "metric": "patterns_detected",
+            "value": 2,
+            "interpretation": "patterns found in recent service data"
+        },
+        {
+            "metric": "bayesian_posterior_variance",
+            "value": 1,
+            "threshold": 0.25,
+            "interpretation": "ratio of uncertainty variance to squared effect"
+        },
+        {
+            "metric": "consistency",
+            "value": 1,
+            "threshold": 0.45,
+            "interpretation": "how consistent the likely cause is between checks"
+        }
+    ],
+    "remediation": [
+        {
+            "action": "pause automated fixes",
+            "target": "docker-compose-front-end-1",
+            "priority": 1,
+            "rationale": "ABSIA is not sure enough yet",
+            "expected_effect": "prevents unsafe automated action"
+        },
+        {
+            "action": "collect residual_variance_decomposition",
+            "target": "docker-compose-front-end-1",
+            "priority": 2,
+            "rationale": "Decompose target node variance across all candidate inputs to quantify the unexplained fraction attributable to unobserved nodes. Prioritise inputs with zero current coverage in the causal graph.",
+            "expected_effect": "adds the missing data needed for a safer answer"
+        }
+    ]
+}

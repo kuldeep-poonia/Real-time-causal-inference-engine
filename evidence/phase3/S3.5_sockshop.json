@@ -1,0 +1,87 @@
+{
+    "success": true,
+    "data_source": "real",
+    "root_cause": "docker-compose-carts-1",
+    "physics_root_cause": "docker-compose-carts-1",
+    "actions_recommended": 0,
+    "patterns_detected": 3,
+    "summary": "[PIPELINE SUMMARY]\nPhase 1: rho=0.003 lambda=0.01 mu=2.50 source=real\nPhase 2: 3 patterns dynamics=saturating divergence=0.137 features=true\nPhase 3: target=docker-compose-front-end-1 score=0.2550 conf=0.6263\n  physics root: docker-compose-carts-1 score=0.2550\nSafety: state=PROBABLE score=0.626 risk=LOW fallback=false\nExecutionTimeMS: 283.0\nErrors: [Phase 3: no lagged causal hypotheses; using queue-physics fallback when available]\n",
+    "execution_time_ms": 283.016431,
+    "confidence_score": 0.6262605344991996,
+    "confidence_state": "PROBABLE",
+    "latent_risk": "LOW",
+    "fallback_triggered": false,
+    "safety": {
+        "confidence_score": 0.6262605344991996,
+        "confidence_state": "PROBABLE",
+        "latent_risk": "LOW",
+        "fallback_triggered": false,
+        "posterior_variance": 0,
+        "posterior_precision": 1,
+        "determinism": 1
+    },
+    "operational_state": "WATCH",
+    "incident_title": "docker-compose-carts-1 needs watching",
+    "failure_category": "Queue Saturation",
+    "confidence_narrative": "I am 63% sure. Review the suggested steps before acting.",
+    "severity": 0,
+    "blast_radius": 0,
+    "timeline": [
+        "docker-compose-front-end-1: selected service may be affected by this issue."
+    ],
+    "narrative": [
+        "What is happening: docker-compose-carts-1 is starting to show pressure, but it has not crossed a failure threshold.",
+        "Why it matters: the service is receiving more work or holding more backlog than it can comfortably process.",
+        "How it appears to be happening: docker-compose-front-end-1: selected service may be affected by this issue.",
+        "How to fix first: reduce upstream concurrency. Reason: incoming work is at or above service capacity."
+    ],
+    "evidence": [
+        {
+            "metric": "dynamics",
+            "value": 0.137,
+            "interpretation": "recent service behavior is classified as saturating"
+        },
+        {
+            "metric": "patterns_detected",
+            "value": 3,
+            "interpretation": "patterns found in recent service data"
+        },
+        {
+            "metric": "bayesian_posterior_variance",
+            "threshold": 0.25,
+            "interpretation": "ratio of uncertainty variance to squared effect"
+        },
+        {
+            "metric": "consistency",
+            "value": 1,
+            "threshold": 0.45,
+            "interpretation": "how consistent the likely cause is between checks"
+        }
+    ],
+    "remediation": [
+        {
+            "action": "reduce upstream concurrency",
+            "target": "docker-compose-carts-1",
+            "priority": 1,
+            "rationale": "incoming work is at or above service capacity",
+            "expected_effect": "brings load back below saturation",
+            "confidence": 0.626
+        },
+        {
+            "action": "drain queues before raising retry budgets",
+            "target": "docker-compose-carts-1",
+            "priority": 2,
+            "rationale": "existing backlog is operational evidence of pressure",
+            "expected_effect": "reduces timeout amplification",
+            "confidence": 0.626
+        },
+        {
+            "action": "add capacity to the saturated service",
+            "target": "docker-compose-carts-1",
+            "priority": 3,
+            "rationale": "capacity is below observed demand",
+            "expected_effect": "increases capacity for the hot path",
+            "confidence": 0.626
+        }
+    ]
+}

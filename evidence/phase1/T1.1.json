@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "ready": true,
+  "version": "2.1.0",
+  "real_data_available": true,
+  "ingested_node_count": 3,
+  "auth_mode": "disabled"
+}

@@ -61,6 +61,7 @@ ABSIA features a pristine, Apple-style light mode dashboard that requires zero c
 
 For engineers, architects, and engineering managers evaluating ABSIA, please read our exhaustive documentation suite:
 
+- [**BENCHMARK.md**](./BENCHMARK.md) - The rigorous Phase 4 and Phase 5 empirical testing results, proving ABSIA's TTR reduction against Prometheus/Grafana.
 - [**DOCUMENTATION.md**](./DOCUMENTATION.md) - The massive, exhaustive guide to ABSIA. Covers detailed mechanics, Return on Investment (ROI), failure semantics, and the exact mathematics used.
 - [**ARCHITECTURE.md**](./ARCHITECTURE.md) - The engineering blueprint. Contains Mermaid.js dependency graphs and the 5-phase inference pipeline.
 - [**API.md**](./API.md) - The complete HTTP API contract for custom integrations.

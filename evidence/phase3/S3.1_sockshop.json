@@ -1,0 +1,71 @@
+{
+    "success": true,
+    "data_source": "real",
+    "root_cause": "docker-compose-orders-1",
+    "physics_root_cause": "docker-compose-orders-1",
+    "actions_recommended": 0,
+    "patterns_detected": 3,
+    "summary": "[PIPELINE SUMMARY]\nPhase 1: rho=0.007 lambda=0.02 mu=2.49 source=real\nPhase 2: 3 patterns dynamics=stable divergence=0.078 features=true\nPhase 3: target=docker-compose-front-end-1 score=0.2548 conf=0.6262\n  physics root: docker-compose-orders-1 score=0.2548\nSafety: state=PROBABLE score=0.626 risk=LOW fallback=false\nExecutionTimeMS: 298.5\nErrors: [Phase 3: no lagged causal hypotheses; using queue-physics fallback when available]\n",
+    "execution_time_ms": 298.503907,
+    "confidence_score": 0.6261876075537673,
+    "confidence_state": "PROBABLE",
+    "latent_risk": "LOW",
+    "fallback_triggered": false,
+    "safety": {
+        "confidence_score": 0.6261876075537673,
+        "confidence_state": "PROBABLE",
+        "latent_risk": "LOW",
+        "fallback_triggered": false,
+        "posterior_variance": 0,
+        "posterior_precision": 1,
+        "determinism": 1
+    },
+    "operational_state": "WATCH",
+    "incident_title": "docker-compose-orders-1 needs watching",
+    "failure_category": "Telemetry Blind Spot",
+    "confidence_narrative": "I am 63% sure. Review the suggested steps before acting.",
+    "severity": 0,
+    "blast_radius": 0,
+    "timeline": [
+        "docker-compose-front-end-1: selected service may be affected by this issue."
+    ],
+    "narrative": [
+        "What is happening: docker-compose-orders-1 is starting to show pressure, but it has not crossed a failure threshold.",
+        "Why it matters: the service is receiving more work or holding more backlog than it can comfortably process.",
+        "How it appears to be happening: docker-compose-front-end-1: selected service may be affected by this issue.",
+        "How to fix first: collect targeted service data before acting. Reason: the current evidence does not support a safe operational action."
+    ],
+    "evidence": [
+        {
+            "metric": "dynamics",
+            "value": 0.078,
+            "interpretation": "recent service behavior is classified as stable"
+        },
+        {
+            "metric": "patterns_detected",
+            "value": 3,
+            "interpretation": "patterns found in recent service data"
+        },
+        {
+            "metric": "bayesian_posterior_variance",
+            "threshold": 0.25,
+            "interpretation": "ratio of uncertainty variance to squared effect"
+        },
+        {
+            "metric": "consistency",
+            "value": 1,
+            "threshold": 0.45,
+            "interpretation": "how consistent the likely cause is between checks"
+        }
+    ],
+    "remediation": [
+        {
+            "action": "collect targeted service data before acting",
+            "target": "docker-compose-orders-1",
+            "priority": 1,
+            "rationale": "the current evidence does not support a safe operational action",
+            "expected_effect": "improves coverage and confidence",
+            "confidence": 0.626
+        }
+    ]
+}
