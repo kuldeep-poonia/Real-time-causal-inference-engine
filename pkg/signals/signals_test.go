@@ -106,7 +106,7 @@ func TestAlphaCorrelationComputation(t *testing.T) {
 func TestFuseSignals_DominantCompute(t *testing.T) {
 	baseline := NewAdaptiveBaseline("node1") // Uses fallback threshold = 0.7
 	compute := ComputeSignal{CPUFraction: 0.8, ThrottleFraction: 0.0}
-	memory := MemorySignal{WorkingSet: 100, Limit: 1000, MajorPageFaultRate: 0}
+	memory := MemorySignal{WorkingSet: 100, Limit: 1000, MajorPageFaultRate: 0, FaultRatePerSec: 0, GrowthRateMBps: 0}
 	net := NetworkSignal{}
 
 	metrics := FuseSignals(compute, memory, net, baseline)
@@ -118,8 +118,14 @@ func TestFuseSignals_DominantCompute(t *testing.T) {
 // 7. FuseSignals with memory thrashing → dominant="memory"
 func TestFuseSignals_DominantMemoryThrashing(t *testing.T) {
 	baseline := NewAdaptiveBaseline("node1") // Uses fallback threshold = 0.6
+	
+	// Seed baseline to pass the cold start guard (phCount >= 3)
+	baseline.ComputeMemoryPressure(0, 0)
+	baseline.ComputeMemoryPressure(0, 0)
+	baseline.ComputeMemoryPressure(0, 0)
+
 	compute := ComputeSignal{CPUFraction: 0.1, ThrottleFraction: 0.0}
-	memory := MemorySignal{WorkingSet: 900, Limit: 1000, MajorPageFaultRate: 100}
+	memory := MemorySignal{WorkingSet: 900, Limit: 1000, MajorPageFaultRate: 100, FaultRatePerSec: 100, GrowthRateMBps: 50}
 	net := NetworkSignal{} 
 
 	metrics := FuseSignals(compute, memory, net, baseline)
