@@ -353,6 +353,11 @@ func TestFullPipelineE2E(t *testing.T) {
 		overall = "FAIL"
 	}
 
+	if avg > 100.0 {
+		t.Errorf("Performance regression: avg execution time %.1fms exceeds 100ms SLA", avg)
+		overall = "FAIL"
+	}
+
 	report.Summary.TotalRuns = len(runCases)
 	report.Summary.SafetyAlwaysSet = safetyAlwaysSet
 	report.Summary.ScoresAllBounded = allScoresBounded
