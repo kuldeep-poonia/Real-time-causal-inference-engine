@@ -3,6 +3,8 @@ package phase5_insight
 import (
 	"math"
 	"sort"
+
+	"absia/pkg/adaptive"
 )
 
 /*
@@ -105,27 +107,9 @@ const (
 )
 
 /*
-Component weights — sum exactly to 1.0 for linear score interpretability.
-
-Weight distribution rationale:
-  PosteriorPrecision (0.30): Primary structural evidence — the inverse of the maximum
-    posterior variance ratio. High weight because variance directly indicates
-    unmeasured confounders and poor causal identifiability.
-  ResidualExplained (0.30): Primary effect evidence — fraction of observed
-    causal signal accounted for by the DAG. Co-equal with coverage because it
-    measures explanatory power rather than structural completeness.
-  RoleConsistency (0.20): Secondary structural check — agreement between fusion's
-    role assignments and the explanation's effect estimates. Important but
-    dependent on the quality of both upstream phases.
-  Determinism (0.20): Reliability modifier — penalises instability without
-    completely dominating the score. A stable wrong answer is still wrong.
+Component weights are now calculated dynamically using information-theoretic entropy,
+metric quality, and observation count.
 */
-const (
-	wPosteriorPrecision = 0.30
-	wDeterminism      = 0.20
-	wResidualExplained = 0.30
-	wRoleConsistency  = 0.20
-)
 
 /*
 Latent risk penalties (absolute deductions from the weighted score).
@@ -189,11 +173,18 @@ func ComputeConfidence(
 		comps.LatentPenalty = latentPenaltyLow
 	}
 
+	// Dynamic weight calculation based on entropy, metric quality, and observation count.
+	rootCause := ""
+	if len(fusion.RootCauses) > 0 {
+		rootCause = fusion.RootCauses[0]
+	}
+	wPrec, wDet, wRes, wRole := computeDynamicWeights(comps, rootCause)
+
 	// Linear score composition.
-	raw := wPosteriorPrecision*comps.PosteriorPrecision +
-		wDeterminism*comps.Determinism +
-		wResidualExplained*comps.ResidualExplained +
-		wRoleConsistency*comps.RoleConsistency -
+	raw := wPrec*comps.PosteriorPrecision +
+		wDet*comps.Determinism +
+		wRes*comps.ResidualExplained +
+		wRole*comps.RoleConsistency -
 		comps.LatentPenalty
 
 	score := math.Max(0.0, math.Min(1.0, raw))
@@ -263,4 +254,44 @@ func ceRoleConsistency(fusion FusionResult, exp Explanation) float64 {
 	}
 
 	return float64(confirmed) / float64(len(unique))
+}
+
+func entropy(p float64) float64 {
+	if p <= 0 || p >= 1 {
+		return 0
+	}
+	return -p*math.Log2(p) - (1-p)*math.Log2(1-p)
+}
+
+func computeDynamicWeights(comps ConfidenceComponents, rootCause string) (float64, float64, float64, float64) {
+	// 1. Calculate Information (1 - Entropy)
+	iPrec := 1.0 - entropy(comps.PosteriorPrecision)
+	iDet := 1.0 - entropy(comps.Determinism)
+	iRes := 1.0 - entropy(comps.ResidualExplained)
+	iRole := 1.0 - entropy(comps.RoleConsistency)
+
+	// 2. Adjust for Observation Count and Quality
+	obsMultiplier := 1.0
+	if rootCause != "" {
+		profile := adaptive.GlobalStore.GetProfile(rootCause)
+		// Use Confidence from evaluate as a proxy for observation maturity
+		res := profile.EvaluateLoad(0)
+		obsMultiplier = res.Confidence
+		if obsMultiplier < 0.1 {
+			obsMultiplier = 0.1 // prevent zero weights
+		}
+	}
+	
+	metricQuality := 1.0 // Placeholder for Phase 2 Metric Quality
+
+	wPrec := iPrec * obsMultiplier * metricQuality
+	wDet := iDet * obsMultiplier * metricQuality
+	wRes := iRes * obsMultiplier * metricQuality
+	wRole := iRole * obsMultiplier * metricQuality
+
+	sum := wPrec + wDet + wRes + wRole
+	if sum == 0 {
+		return 0.25, 0.25, 0.25, 0.25
+	}
+	return wPrec / sum, wDet / sum, wRes / sum, wRole / sum
 }
