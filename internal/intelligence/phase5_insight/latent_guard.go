@@ -3,6 +3,8 @@ package phase5_insight
 import (
 	"math"
 	"sort"
+
+	"absia/pkg/adaptive"
 )
 
 /*
@@ -81,42 +83,11 @@ Detection thresholds — each value carries an explicit mathematical rationale.
 No threshold in this file may be changed without updating its justification.
 */
 
-const (
-	// latentCorrNoPathThreshold: 0.70
-	// Cohen (1988): canonical strong-correlation boundary at r = 0.50 (medium)
-	// and r = 0.70+ (large). Above 0.70, the absence of any directed DAG path
-	// between two nodes is statistically anomalous (p < 0.05 for n > 30 under
-	// bivariate Gaussian assumptions). We use normalized effect magnitude
-	// |effect(v)| / Σ|effects| as a linear-SCM-valid proxy for Pearson r,
-	// which is exact when CausalNode.Func is linear (as used in this system).
-	latentCorrNoPathThreshold = 0.70
-
-	// latentResidualThreshold: 0.40
-	// If identified causes (those with a DAG path to target) account for less
-	// than 40% of total observed effect magnitude, the majority of the system's
-	// variation is unaccounted. Richardson & Spirtes (2002) PAG completeness
-	// theory uses 0.50 as the symmetry point; we apply 0.40 to maintain
-	// conservative bias given that observability depth is unknown at runtime.
-	latentResidualThreshold = 0.40
-
-	// latentInstabilityThreshold: 0.30
-	// Spearman rank instability = (1 − ρ_s) / 2.
-	// At instability = 0.30, ρ_s = 0.40, which Kendall (1970) characterises as
-	// "no meaningful rank association". Rankings at this level are consistent
-	// with random ordering relative to true causal priority. Our threshold is
-	// stricter than the Kendall τ = 0.50 no-association boundary, appropriate
-	// for production systems where ranking errors propagate to remediation.
-	latentInstabilityThreshold = 0.30
-
-	// latentVarianceSNRThreshold: 0.25
-	// Rather than using a static graph coverage heuristic, we use a dynamic
-	// Bayesian threshold based on Signal-to-Noise Ratio (SNR).
-	// If the posterior variance exceeds (Effect / 2)^2, the 95% credible
-	// interval crosses zero, indicating the causal effect is indistinguishable
-	// from noise (implying unmeasured confounders).
-	// Threshold = 0.25 * (Effect)^2
-	latentVarianceSNRThreshold = 0.25
-)
+/*
+Detection thresholds have been migrated to AdaptiveNodeProfile using dynamic 3-sigma
+bounds based on online statistical process control (Shewhart).
+Fallback bounds during warmup correspond to the historic static thresholds.
+*/
 
 // AssessLatentRisk is the single entry point for the latent guard.
 //
@@ -148,11 +119,17 @@ func AssessLatentRisk(
 	}
 
 	// Evaluate all four channels independently before composing risk level.
-	// Independence is critical: channels must not short-circuit each other.
-	corrScore, suspNodes := lgCorrNoPathScore(graph, exp, target)
+	profile := adaptive.GlobalStore.GetProfile(target)
+	
+	// We pass profile into lgCorrNoPathScore because it tests multiple suspicious nodes.
+	// But it returns the maxScore. We can evaluate maxScore against the profile.
+	corrScore, suspNodes := lgCorrNoPathScore(graph, exp, target, profile)
 	residualRatio := lgResidualRatio(graph, exp, target)
 	rankInstab := lgRankInstability(exp.Causes, prevRanking)
 	maxVarRatio := lgMaxPosteriorVariance(exp)
+	
+	// Update guard metrics in the adaptive profile
+	profile.UpdateGuardMetrics(corrScore, residualRatio, rankInstab, maxVarRatio)
 
 	report := LatentRiskReport{
 		Signals:          SignalNone,
@@ -163,16 +140,16 @@ func AssessLatentRisk(
 		SuspiciousNodes:  suspNodes,
 	}
 
-	if corrScore >= latentCorrNoPathThreshold {
+	if profile.EvaluateCorrNoPath(corrScore).IsAnomaly {
 		report.Signals |= SignalCorrelationNoPath
 	}
-	if residualRatio < latentResidualThreshold {
+	if profile.EvaluateResidual(residualRatio).IsAnomaly {
 		report.Signals |= SignalUnexplainedResidual
 	}
-	if rankInstab > latentInstabilityThreshold {
+	if profile.EvaluateInstability(rankInstab).IsAnomaly {
 		report.Signals |= SignalRankingInstability
 	}
-	if maxVarRatio > latentVarianceSNRThreshold {
+	if profile.EvaluateVarianceSNR(maxVarRatio).IsAnomaly {
 		report.Signals |= SignalHighPosteriorVariance
 	}
 
@@ -224,6 +201,7 @@ func lgCorrNoPathScore(
 	graph *CausalGraph,
 	exp Explanation,
 	target string,
+	profile *adaptive.AdaptiveNodeProfile,
 ) (maxScore float64, suspicious []string) {
 	suspicious = []string{}
 
@@ -252,7 +230,7 @@ func lgCorrNoPathScore(
 			if normEffect > maxScore {
 				maxScore = normEffect
 			}
-			if normEffect >= latentCorrNoPathThreshold {
+			if profile.EvaluateCorrNoPath(normEffect).IsAnomaly {
 				suspicious = append(suspicious, nodeID)
 			}
 		}
