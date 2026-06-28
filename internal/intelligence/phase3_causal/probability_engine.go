@@ -78,21 +78,6 @@ func EstimateEdgeProbability(
 			continue
 		}
 
-		// Confounder residualization: extract z-values from whichever series
-		// has higher variance (used as a proxy common-cause), then residualize
-		// both X and Y against Z before computing correlations.
-		// This activates the previously dead residualizePair / pickConfounderSeries
-		// / extractZValues code paths.
-		confSeries := pickConfounderSeries(source, target)
-		zVals := extractZValues(confSeries, len(forward))
-		if len(zVals) == len(forward) {
-			forward = residualizeAgainst(forward, zVals)
-		}
-		zValsRev := extractZValues(confSeries, len(reverse))
-		if len(zValsRev) == len(reverse) {
-			reverse = residualizeAgainst(reverse, zValsRev)
-		}
-
 		fCorr := weightedCorrelation(preprocess(forward))
 		rCorr := weightedCorrelation(preprocess(reverse))
 
