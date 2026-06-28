@@ -88,8 +88,11 @@ func EstimateEdgeProbability(
 			continue
 		}
 
-		// forward must strongly dominate reverse
-		if math.Abs(fCorr) <= math.Abs(rCorr)*1.01 {
+		// In synchronous microservice environments with 8-second polling,
+		// propagation is instantaneous relative to the polling interval.
+		// Thus, fCorr and rCorr may be identical. We relax this to allow
+		// symmetric edges to pass to the PC Algorithm for orientation.
+		if math.Abs(fCorr) < math.Abs(rCorr) {
 			continue
 		}
 

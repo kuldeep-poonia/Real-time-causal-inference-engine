@@ -399,7 +399,7 @@ func ExecuteFullPipelineFromStore(
 	temporalGraph := buildTemporalGraph(realisticData)
 
 	probCfg := phase3.ProbabilityConfig{
-		MinSamples: 4, LagSteps: []int{1, 2},
+		MinSamples: 4, LagSteps: []int{0, 1, 2},
 		TimeTolerance: 30 * time.Second, DirectionThreshold: 0.1,
 	}
 	discoveredGraph := phase3.UpdateGraphProbabilities(temporalGraph, probCfg)
