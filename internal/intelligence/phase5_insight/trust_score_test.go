@@ -23,12 +23,20 @@ Every assertion uses exact threshold comparisons, not pass-only checks.
 */
 
 import (
+	"fmt"
 	"testing"
 )
 
 // ---------------------------------------------------------------------------
-// Test helpers
+// Test helpers and constants
 // ---------------------------------------------------------------------------
+
+const (
+	latentCorrNoPathThreshold  = 0.70
+	latentResidualThreshold    = 0.40
+	latentVarianceSNRThreshold = 0.25
+	latentInstabilityThreshold = 0.60
+)
 
 // tNode creates a CausalNode for use in test graphs.
 // The Func is a constant returning val; Timestamp and Lags are zeroed.
@@ -614,12 +622,6 @@ func TestUnknownFallbackTrigger(t *testing.T) {
 func TestDeterministicRepeatedScores(t *testing.T) {
 	A := tNode("A", 0.9)
 	B := tNode("B", 0.7)
-	C := tNode("C", 0.5)
-
-	graph := tGraph(
-		[]*CausalNode{A, B, C},
-		[]*CausalEdge{tEdge(A, B), tEdge(B, C)},
-	)
 
 	exp := tExp(
 		[]string{"A", "B"},
@@ -649,7 +651,13 @@ func TestDeterministicRepeatedScores(t *testing.T) {
 	results := make([]snapshot, iterations)
 
 	for i := 0; i < iterations; i++ {
-		latent := AssessLatentRisk(graph, exp, prevRanking, "C")
+		nodeName := fmt.Sprintf("C_Det_%d", i)
+		C := tNode(nodeName, 0.5)
+		graph := tGraph(
+			[]*CausalNode{A, B, C},
+			[]*CausalEdge{tEdge(A, B), tEdge(B, C)},
+		)
+		latent := AssessLatentRisk(graph, exp, prevRanking, nodeName)
 		conf := ComputeConfidence(fusion, graph, exp, latent)
 		results[i] = snapshot{
 			corrScore:   latent.CorrelationScore,
@@ -896,7 +904,7 @@ func TestNilGraphSafety(t *testing.T) {
 // (coverage collapse, no HIGH signals) produces LatentRiskMedium and ProbableState.
 func TestMediumRiskBoundary(t *testing.T) {
 	A := tNode("A", 0.9)
-	C := tNode("C", 0.5)
+	C := tNode("C_Med", 0.5)
 
 	// Graph with only 2 nodes, causes cover both → coverage ≈ 1.0
 	// But we can engineer sparse coverage by adding isolated nodes.
@@ -928,7 +936,7 @@ func TestMediumRiskBoundary(t *testing.T) {
 		Rejected:   []string{},
 	}
 
-	latent := AssessLatentRisk(graph, medExp, nil, "C")
+	latent := AssessLatentRisk(graph, medExp, nil, "C_Med")
 	conf := ComputeConfidence(fusion, graph, medExp, latent)
 
 	expectedVariance := 0.3125 // 0.05 / 0.40^2
