@@ -8,6 +8,7 @@ import (
 
 	phase2 "absia/internal/intelligence/phase2_pattern"
 	phase3 "absia/internal/intelligence/phase3_causal"
+	"absia/pkg/adaptive"
 )
 
 type OperationalState string
@@ -137,17 +138,20 @@ func classifyFailureCategory(
 	blastRadius, depth int,
 ) FailureCategory {
 	rootLower := strings.ToLower(root + " " + target)
-	load := 0.0
-	queue := 0.0
+	
+	var loadIsAnomaly, queueIsAnomaly, loadIsExtreme bool
 	if hasRootState {
-		load = rootState.Load
-		queue = rootState.QueueLength
+		profile := adaptive.GlobalStore.GetProfile(root)
+		loadIsAnomaly = profile.EvaluateLoad(rootState.Load).IsAnomaly
+		queueIsAnomaly = profile.EvaluateQueue(rootState.QueueLength).IsAnomaly
+		// For extreme cases like EventLoopSaturation
+		loadIsExtreme = rootState.Load >= (profile.EvaluateLoad(rootState.Load).Value * 1.2)
 	}
 
-	if containsAny(rootLower, "auth", "oauth", "jwt", "token", "identity") && (load >= 0.85 || queue >= 100) {
+	if containsAny(rootLower, "auth", "oauth", "jwt", "token", "identity") && (loadIsAnomaly || queueIsAnomaly) {
 		return CategoryAuthBottleneck
 	}
-	if containsAny(rootLower, "db", "database", "postgres", "mysql", "redis", "mongo", "proxy") && (load >= 0.85 || queue >= 100) {
+	if containsAny(rootLower, "db", "database", "postgres", "mysql", "redis", "mongo", "proxy") && (loadIsAnomaly || queueIsAnomaly) {
 		return CategoryDBSaturation
 	}
 	if depth >= 2 && blastRadius >= 2 {
@@ -156,10 +160,10 @@ func classifyFailureCategory(
 	if blastRadius >= 3 {
 		return CategoryBackpressureCollapse
 	}
-	if hasRootState && queue >= 100 && load < 0.85 {
+	if hasRootState && queueIsAnomaly && !loadIsAnomaly {
 		return CategoryPoolStarvation
 	}
-	if hasRootState && (load >= 1.05 || queue >= 100) {
+	if hasRootState && (loadIsAnomaly || queueIsAnomaly) {
 		return CategoryQueueSaturation
 	}
 	if result != nil && result.Phase2Dynamics != nil {
@@ -189,10 +193,10 @@ func classifyFailureCategory(
 	if containsAny(rootLower, "lock", "mutex", "semaphore") {
 		return CategoryLockContention
 	}
-	if containsAny(rootLower, "node", "event", "loop") && hasRootState && load >= 1.0 {
+	if containsAny(rootLower, "node", "event", "loop") && hasRootState && loadIsExtreme {
 		return CategoryEventLoopSaturation
 	}
-	if hasRootState && rootState.ServiceRate > 0 && rootState.ArrivalRate == 0 && queue > 0 {
+	if hasRootState && rootState.ServiceRate > 0 && rootState.ArrivalRate == 0 && queueIsAnomaly {
 		return CategoryDependencyStall
 	}
 	return CategoryTelemetryBlindSpot
@@ -205,13 +209,27 @@ func classifyOperationalState(
 	blastRadius, depth int,
 	category FailureCategory,
 ) OperationalState {
-	maxLoad, maxQueue := maxPressure(result, rootState, hasRootState)
+	var loadIsAnomaly, queueIsAnomaly, maxLoadIsExtreme bool
+	
+	if hasRootState {
+		// Because maxPressure looks at root causes, we'll approximate with root node profile
+		// for simplicity, or we can check the worst anomaly. Let's use root profile for max load.
+		maxLoad, maxQueue := maxPressure(result, rootState, hasRootState)
+		profile := adaptive.GlobalStore.GetProfile(result.PrimaryRootCause()) // Default to root
+		
+		loadRes := profile.EvaluateLoad(maxLoad)
+		queueRes := profile.EvaluateQueue(maxQueue)
+		loadIsAnomaly = loadRes.IsAnomaly
+		queueIsAnomaly = queueRes.IsAnomaly
+		maxLoadIsExtreme = maxLoad >= (loadRes.Value * 1.2) // Approximating maxLoad >= 1.20
+	}
+
 	if result != nil && result.Phase2Dynamics != nil && result.Phase2Dynamics.Type == phase2.ConvergingDynamics {
-		if maxLoad < 1.05 && maxQueue < 100 {
+		if !loadIsAnomaly && !queueIsAnomaly {
 			return StateRecovering
 		}
 	}
-	if maxLoad >= 1.20 || maxQueue >= 10000 || blastRadius >= 4 {
+	if maxLoadIsExtreme || blastRadius >= 4 { // maxQueue >= 10000 removed, replaced by maxLoad extreme
 		return StateCritical
 	}
 	if category == CategoryCascadingFailure || category == CategoryBackpressureCollapse {
@@ -231,11 +249,14 @@ func classifyOperationalState(
 			return StateUnstable
 		}
 	}
-	if maxLoad >= 1.05 || maxQueue >= 100 {
+	if loadIsAnomaly || queueIsAnomaly {
 		return StateDegraded
 	}
-	if maxLoad >= 0.60 || len(result.Phase2Patterns) > 0 {
-		return StateWatch
+	if hasRootState && (rootState.Load >= 0.60 || len(result.Phase2Patterns) > 0) { // Keep 0.60 for watch? Or replace. Let's use 60% of threshold
+		profile := adaptive.GlobalStore.GetProfile(result.PrimaryRootCause())
+		if rootState.Load >= (profile.EvaluateLoad(rootState.Load).Value * 0.7) || len(result.Phase2Patterns) > 0 {
+			return StateWatch
+		}
 	}
 	return StateHealthy
 }
@@ -345,7 +366,7 @@ func buildSemanticEvidence(
 			FailureEvidence{NodeID: sem.RootCause, Metric: "load", Value: round3(rootState.Load), Threshold: 0.85, Interpretation: "load is at or above the pressure threshold"},
 			FailureEvidence{NodeID: sem.RootCause, Metric: "incoming_work", Value: round3(rootState.ArrivalRate), Interpretation: "incoming work observed for this service"},
 			FailureEvidence{NodeID: sem.RootCause, Metric: "capacity", Value: round3(rootState.ServiceRate), Interpretation: "processing capacity observed for this service"},
-			FailureEvidence{NodeID: sem.RootCause, Metric: "waiting_work", Value: round3(rootState.QueueLength), Threshold: 100, Interpretation: "waiting work reported by service data"},
+			FailureEvidence{NodeID: sem.RootCause, Metric: "waiting_work", Value: round3(rootState.QueueLength), Interpretation: "waiting work reported by service data"},
 		)
 	}
 	for _, nodeID := range pressureNodeIDs(nodeStates) {
@@ -357,7 +378,6 @@ func buildSemanticEvidence(
 			NodeID:         nodeID,
 			Metric:         "load",
 			Value:          round3(st.Load),
-			Threshold:      0.85,
 			Interpretation: "another service needs attention at the same time",
 		})
 	}
@@ -497,7 +517,8 @@ func pressureNodeIDs(nodeStates map[string]phase3.NodeState) []string {
 	ids := make([]string, 0)
 	for nodeID, st := range nodeStates {
 		st = normalizedNodeState(st)
-		if st.Load >= 0.85 || st.QueueLength >= 100 {
+		profile := adaptive.GlobalStore.GetProfile(nodeID)
+		if profile.EvaluateLoad(st.Load).IsAnomaly || profile.EvaluateQueue(st.QueueLength).IsAnomaly {
 			ids = append(ids, nodeID)
 		}
 	}
