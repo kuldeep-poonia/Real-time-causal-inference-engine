@@ -1,6 +1,7 @@
 package phase3_causal
 
 import (
+	"log"
 	"math"
 	"time"
 )
@@ -440,6 +441,9 @@ func UpdateGraphProbabilities(
 			result.Edges = append(result.Edges, edge)
 		}
 	}
+
+	log.Printf("Phase3 DEBUG: %d nodes, %d pairs evaluated, %d edges created",
+		len(nodeIDs), len(nodeIDs)*(len(nodeIDs)-1), len(result.Edges))
 
 	return result
 }
