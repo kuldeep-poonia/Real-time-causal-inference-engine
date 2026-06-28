@@ -244,32 +244,31 @@
                 <div id="orange-box" class="orange-box" style="display:none;">
                     Still collecting data. Check back in 60 seconds.
                 </div>
-                <div id="result-content" class="result-card" style="display:none;">
-                    <div class="result-header">🔍 Root Cause Found</div>
+                <div id="result-content" class="result-card" style="display:none; padding: 24px;">
+                    <div style="text-align: center; color: var(--text-secondary); margin-bottom: 12px; font-weight: bold;">━━━━━━━━━━━━━━━━━━━━━━</div>
+                    <div class="result-header" style="justify-content: center; margin-bottom: 4px;">🔴 Root Cause: <span id="res-service"></span></div>
+                    <div style="text-align: center; margin-bottom: 12px;">Certainty: <span id="res-certainty" style="font-weight: 600;"></span></div>
+                    <div style="text-align: center; color: var(--text-secondary); margin-bottom: 24px; font-weight: bold;">━━━━━━━━━━━━━━━━━━━━━━</div>
                     
                     <div class="result-item">
-                        <div class="result-label">Service</div>
-                        <div class="result-text" id="res-service"></div>
-                    </div>
-                    <div class="result-item">
-                        <div class="result-label">Certainty</div>
-                        <div class="result-text" id="res-certainty"></div>
-                    </div>
-                    <div class="result-item">
-                        <div class="result-label">What's happening:</div>
-                        <div class="result-text" id="res-what"></div>
-                    </div>
-                    <div class="result-item">
-                        <div class="result-label">Why it matters:</div>
+                        <div class="result-label">What's wrong:</div>
                         <div class="result-text" id="res-why"></div>
                     </div>
+                    
                     <div class="result-item">
-                        <div class="result-label">What to do:</div>
+                        <div class="result-label">Current signals:</div>
+                        <div class="result-text" style="font-family: monospace; white-space: pre-wrap;" id="res-signals"></div>
+                    </div>
+
+                    <div class="result-item">
+                        <div class="result-label">What to do right now:</div>
                         <div class="result-text" id="res-todo"></div>
                     </div>
+                    
+                    <div style="text-align: center; color: var(--text-secondary); margin-top: 24px; font-weight: bold;">━━━━━━━━━━━━━━━━━━━━━━</div>
                 </div>
 
-                <div class="explore-box">
+                <div id="explore-box" class="explore-box" style="display:none;">
                     <div class="result-label">Explore Incident</div>
                     <form id="explore-form">
                         <input type="text" id="explore-input" class="explore-input" placeholder="Ask a question about this incident..." autocomplete="off">
@@ -525,24 +524,48 @@
                 if (analysisData.fallback_triggered) {
                     orangeBox.style.display = 'block';
                     resultContent.style.display = 'none';
+                    document.getElementById('explore-box').style.display = 'none';
                 } else {
                     orangeBox.style.display = 'none';
                     resultContent.style.display = 'block';
 
+                    const cpuVal = Math.min(100, (analysisData.compute_pressure || 0) * 100).toFixed(0);
+                    const memVal = Math.min(100, (analysisData.memory_pressure || 0) * 100).toFixed(0);
+                    const netVal = Math.min(100, (analysisData.network_pressure || 0) * 100).toFixed(0);
+                    const domSignal = translateSignal(analysisData.dominant_signal);
+
                     document.getElementById('res-service').textContent = cleanName(semData.root_cause || analysisData.root_cause);
                     document.getElementById('res-certainty').textContent = (semData.confidence_score * 100).toFixed(0) + '%';
                     
-                    let whatStr = (semData.narrative && semData.narrative.length > 0) ? semData.narrative[0] : 'Anomaly detected in service.';
-                    let whyStr = (semData.narrative && semData.narrative.length > 1) ? semData.narrative[1] : 'Could affect downstream services.';
+                    let narrativeTexts = (semData.narrative || []).map(txt => txt.replace(/^(What is happening:|Why it matters:|How it appears to be happening:)\s*/i, ''));
+                    let whyStr = narrativeTexts.length > 1 ? narrativeTexts[1] : 'Could affect downstream services.';
+                    document.getElementById('res-why').textContent = whyStr;
+
+                    let signalsText = `CPU Stress:    ${cpuVal}%\nMemory Stress: ${memVal}%\nNetwork Stress:${netVal}%\nMain Problem:  ${domSignal}`;
+                    document.getElementById('res-signals').textContent = signalsText;
                     
-                    document.getElementById('res-what').textContent = whatStr.replace(/^What is happening:\s*/i, '');
-                    document.getElementById('res-why').textContent = whyStr.replace(/^Why it matters:\s*/i, '');
-                    
-                    let todoText = "Review service logs.";
+                    let todoHtml = "";
                     if (semData.remediation && semData.remediation.length > 0) {
-                        todoText = semData.remediation.map(r => r.action_type || r.Action || "Review service logs").join(". ");
+                        const uniqueActions = [];
+                        semData.remediation.forEach(r => {
+                            const act = r.action || r.action_type || r.Action || "Review service logs";
+                            const rat = r.rationale || r.Rationale || "";
+                            if (!uniqueActions.find(x => x.action === act)) {
+                                uniqueActions.push({action: act, rationale: rat});
+                            }
+                        });
+                        
+                        todoHtml = uniqueActions.map(r => {
+                            let h = `<div>&rarr; ${r.action}</div>`;
+                            if (r.rationale) h += `<div style="padding-left: 18px; color: var(--text-secondary); margin-bottom: 8px; font-size: 13px;">${r.rationale}</div>`;
+                            return h;
+                        }).join('');
+                    } else {
+                        todoHtml = `<div>&rarr; Review service logs</div>`;
                     }
-                    document.getElementById('res-todo').textContent = todoText;
+                    document.getElementById('res-todo').innerHTML = todoHtml;
+
+                    document.getElementById('explore-box').style.display = 'block';
                 }
             } catch (e) {
                 console.error(e);
@@ -570,9 +593,14 @@
                     body: JSON.stringify({ question: q })
                 });
                 const data = await res.json();
-                ansBox.textContent = data.Answer || data.answer || "No response generated.";
+                let ans = data.Answer || data.answer || "";
+                if (ans && ans.toLowerCase() !== "llm not configured" && !ans.toLowerCase().includes("error")) {
+                    ansBox.textContent = ans;
+                } else {
+                    ansBox.style.display = 'none';
+                }
             } catch (err) {
-                ansBox.textContent = "Error reaching explore endpoint.";
+                ansBox.style.display = 'none';
             }
         };
 
