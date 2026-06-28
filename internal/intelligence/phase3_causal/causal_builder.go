@@ -1,6 +1,7 @@
 package phase3_causal
 
 import (
+	"log"
 	"math"
 	"sort"
 	"strings"
@@ -95,6 +96,9 @@ func filterStrongEdges(edges []*Edge, cfg CausalBuilderConfig) []*Edge {
 	len(e.SourceSeries) > 3 &&
 	len(e.TargetSeries) > 3 {
 			result = append(result, e)
+		} else {
+			log.Printf("Hypothesis %s->%s rejected: prob=%.3f minProb=%.3f str=%.3f minStr=%.3f lenS=%d lenT=%d", 
+				e.From, e.To, e.ExistenceProb, cfg.MinProbability, abs(e.CausalStrength), cfg.MinStrength, len(e.SourceSeries), len(e.TargetSeries))
 		}
 	}
 
