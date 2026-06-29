@@ -34,8 +34,8 @@ type Store struct {
 // New creates a Store with the given sliding-window size.
 // A minimum of 4 samples is enforced (pipeline minimum for correlation).
 func New(windowSize int) *Store {
-	if windowSize < 4 {
-		windowSize = 4
+	if windowSize < 20 {
+		windowSize = 20
 	}
 	return &Store{
 		nodes:      make(map[string][]NodeSample),
