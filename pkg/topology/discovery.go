@@ -16,6 +16,10 @@ type TopologyEdge struct {
 	Source     string // "trace" | "network" | "k8s" | "inferred"
 	Confidence float64
 	CallRate   float64 // calls per second if known
+	
+	// Phase 4: Prior Governance
+	Provenance string
+	UpdatedAt  time.Time
 }
 
 type TopologyGraph struct {
@@ -62,12 +66,15 @@ func (m *Manager) AddTraceEdge(from, to string) {
 			// Increase confidence if seen multiple times via traces
 			if edge.Source == "trace" {
 				m.graph.Edges[i].CallRate += 1.0 // Simple counter for now
+				m.graph.Edges[i].UpdatedAt = time.Now()
 				m.graph.LastUpdated = time.Now()
 				return
 			}
 			// Upgrade source to trace if it was inferred
 			m.graph.Edges[i].Source = "trace"
 			m.graph.Edges[i].Confidence = 0.95
+			m.graph.Edges[i].Provenance = "otel_trace_span"
+			m.graph.Edges[i].UpdatedAt = time.Now()
 			m.graph.LastUpdated = time.Now()
 			return
 		}
@@ -80,18 +87,29 @@ func (m *Manager) AddTraceEdge(from, to string) {
 		Source:     "trace",
 		Confidence: 0.95, // Trace data is highly confident
 		CallRate:   1.0,
+		Provenance: "otel_trace_span",
+		UpdatedAt:  time.Now(),
 	})
 	m.graph.LastUpdated = time.Now()
 }
 
 // GetEdgePrior returns the Bayesian prior probability P(edge) given known topology.
+// It incorporates a decay function where unobserved edges lose confidence over time.
 func (m *Manager) GetEdgePrior(from, to string) float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	for _, edge := range m.graph.Edges {
 		if edge.From == from && edge.To == to {
-			return edge.Confidence
+			// Prior Decay: lose 1% confidence per minute since last update
+			minutesSince := time.Since(edge.UpdatedAt).Minutes()
+			decay := minutesSince * 0.01 
+			
+			confidence := edge.Confidence - decay
+			if confidence < 0.5 {
+				confidence = 0.5 // Floor at uniform prior
+			}
+			return confidence
 		}
 	}
 
@@ -100,4 +118,25 @@ func (m *Manager) GetEdgePrior(from, to string) float64 {
 	// For now, if no edge is found, return the uniform prior (0.5) to let
 	// the data speak for itself.
 	return 0.5
+}
+
+// GetMissingServices identifies nodes that are present in the trace topology
+// but are missing from the provided set of observed metrics node IDs.
+func (m *Manager) GetMissingServices(observedNodes []string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	observedMap := make(map[string]bool)
+	for _, id := range observedNodes {
+		observedMap[id] = true
+	}
+
+	var missing []string
+	for nodeID := range m.graph.Nodes {
+		if !observedMap[nodeID] {
+			missing = append(missing, nodeID)
+		}
+	}
+
+	return missing
 }
