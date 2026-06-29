@@ -9,22 +9,25 @@ import (
 	"time"
 
 	"absia/pkg/metricsstore"
+	"absia/pkg/topology"
 )
 
 // OTLPReceiver handles incoming OTLP metrics in JSON format.
 type OTLPReceiver struct {
-	store *metricsstore.Store
+	store   *metricsstore.Store
+	topoMgr *topology.Manager
 }
 
 // NewOTLPReceiver creates a new receiver instance.
-func NewOTLPReceiver(store *metricsstore.Store) *OTLPReceiver {
-	return &OTLPReceiver{store: store}
+func NewOTLPReceiver(store *metricsstore.Store, topoMgr *topology.Manager) *OTLPReceiver {
+	return &OTLPReceiver{store: store, topoMgr: topoMgr}
 }
 
 // Start HTTP server for OTLP metrics on the given port (default 4318).
 func (r *OTLPReceiver) Start(port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/metrics", r.handleMetrics)
+	mux.HandleFunc("/v1/traces", r.handleTraces)
 	
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("[OTLP] Starting OTLP metric receiver on %s", addr)
@@ -124,6 +127,88 @@ func (r *OTLPReceiver) handleMetrics(w http.ResponseWriter, req *http.Request) {
 		}
 
 		r.store.Put(nodeID, sample)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (r *OTLPReceiver) handleTraces(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer req.Body.Close()
+
+	// Minimal struct for OTLP Trace extraction (v1 JSON)
+	var payload struct {
+		ResourceSpans []struct {
+			Resource struct {
+				Attributes []struct {
+					Key   string `json:"key"`
+					Value struct {
+						StringValue string `json:"stringValue"`
+					} `json:"value"`
+				} `json:"attributes"`
+			} `json:"resource"`
+			ScopeSpans []struct {
+				Spans []struct {
+					SpanID       string `json:"spanId"`
+					ParentSpanID string `json:"parentSpanId"`
+					Name         string `json:"name"`
+				} `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "Invalid OTLP Trace JSON", http.StatusBadRequest)
+		return
+	}
+
+	// We need a mapping from SpanID -> Service Name to connect parent to child services.
+	// 1. Pass 1: Build the span->service map
+	spanToService := make(map[string]string)
+	type edgeDef struct {
+		parentSpanID string
+		childService string
+	}
+	var edges []edgeDef
+
+	for _, rs := range payload.ResourceSpans {
+		serviceName := "unknown"
+		for _, attr := range rs.Resource.Attributes {
+			if attr.Key == "service.name" {
+				serviceName = attr.Value.StringValue
+				break
+			}
+		}
+
+		for _, ss := range rs.ScopeSpans {
+			for _, span := range ss.Spans {
+				spanToService[span.SpanID] = serviceName
+				if span.ParentSpanID != "" {
+					edges = append(edges, edgeDef{
+						parentSpanID: span.ParentSpanID,
+						childService: serviceName,
+					})
+				}
+			}
+		}
+	}
+
+	// 2. Pass 2: Connect parent service to child service using the span mapping
+	for _, edge := range edges {
+		parentService, ok := spanToService[edge.parentSpanID]
+		if ok && parentService != edge.childService {
+			// Cross-service call detected!
+			r.topoMgr.AddTraceEdge(parentService, edge.childService)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
