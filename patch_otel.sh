@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-COMPOSE_FILE="../opentelemetry-demo/compose.yaml"
-OTEL_CONFIG="../opentelemetry-demo/src/otel-collector/otelcol-config.yml"
+COMPOSE_FILE="./opentelemetry-demo/compose.yaml"
+OTEL_CONFIG="./opentelemetry-demo/src/otel-collector/otelcol-config.yml"
 
 echo "Patching compose.yaml..."
 if ! grep -q "absia:" "$COMPOSE_FILE"; then
@@ -27,9 +27,9 @@ else
 fi
 
 echo "Restarting services..."
-cd ../opentelemetry-demo
+cd ./opentelemetry-demo
 docker compose up -d absia
 docker compose restart otel-collector
-cd ../Real-time-causal-inference-engine
+cd ..
 
 echo "Done! Please run the verification script now."
