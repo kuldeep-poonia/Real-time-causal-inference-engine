@@ -144,6 +144,7 @@ func ComputeConfidence(
 	graph *CausalGraph,
 	exp Explanation,
 	latent LatentRiskReport,
+	metricQuality float64,
 ) ConfidenceReport {
 	comps := ConfidenceComponents{}
 
@@ -173,19 +174,20 @@ func ComputeConfidence(
 		comps.LatentPenalty = latentPenaltyLow
 	}
 
-	// Dynamic weight calculation based on entropy, metric quality, and observation count.
+	// Dynamic weight calculation based on entropy and observation count.
 	rootCause := ""
 	if len(fusion.RootCauses) > 0 {
 		rootCause = fusion.RootCauses[0]
 	}
 	wPrec, wDet, wRes, wRole := computeDynamicWeights(comps, rootCause)
 
-	// Linear score composition.
-	raw := wPrec*comps.PosteriorPrecision +
+	// Linear score composition, scaled by metric quality.
+	raw := (wPrec*comps.PosteriorPrecision +
 		wDet*comps.Determinism +
 		wRes*comps.ResidualExplained +
-		wRole*comps.RoleConsistency -
-		comps.LatentPenalty
+		wRole*comps.RoleConsistency) * metricQuality
+
+	raw -= comps.LatentPenalty
 
 	score := math.Max(0.0, math.Min(1.0, raw))
 
@@ -281,13 +283,11 @@ func computeDynamicWeights(comps ConfidenceComponents, rootCause string) (float6
 			obsMultiplier = 0.1 // prevent zero weights
 		}
 	}
-	
-	metricQuality := 1.0 // Placeholder for Phase 2 Metric Quality
 
-	wPrec := iPrec * obsMultiplier * metricQuality
-	wDet := iDet * obsMultiplier * metricQuality
-	wRes := iRes * obsMultiplier * metricQuality
-	wRole := iRole * obsMultiplier * metricQuality
+	wPrec := iPrec * obsMultiplier
+	wDet := iDet * obsMultiplier
+	wRes := iRes * obsMultiplier
+	wRole := iRole * obsMultiplier
 
 	sum := wPrec + wDet + wRes + wRole
 	if sum == 0 {
