@@ -15,22 +15,29 @@ type FeedbackRecord struct {
 	OperatorAction       string    `json:"operator_action"`
 	IncidentClosed       bool      `json:"incident_closed"`
 	Timestamp            time.Time `json:"timestamp"`
+
+	// Phase 4: Component values that produced this confidence (Bayesian, Causal, Physics, Telemetry)
+	Components []float64 `json:"components,omitempty"`
 }
 
 // CalibrationStore persists and analyzes historical accuracy vs confidence.
 type CalibrationStore struct {
 	mu      sync.RWMutex
 	records map[string]FeedbackRecord
+
+	// Learned weights for components [Bayesian, Causal, Physics, Telemetry]
+	learnedWeights []float64
 }
 
 // NewCalibrationStore creates a new empty CalibrationStore.
 func NewCalibrationStore() *CalibrationStore {
 	return &CalibrationStore{
-		records: make(map[string]FeedbackRecord),
+		records:        make(map[string]FeedbackRecord),
+		learnedWeights: []float64{0.25, 0.25, 0.25, 0.25}, // Initial uniform weights
 	}
 }
 
-// RecordFeedback stores a human feedback event.
+// RecordFeedback stores a human feedback event and updates the learned weights via SGD.
 func (s *CalibrationStore) RecordFeedback(record FeedbackRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -39,6 +46,34 @@ func (s *CalibrationStore) RecordFeedback(record FeedbackRecord) {
 		record.Timestamp = time.Now()
 	}
 	s.records[record.PredictionID] = record
+
+	// Online Calibration (SGD Step)
+	// We want to minimize the squared error between PredictedConfidence and Actual Outcome.
+	// Actual outcome = 1.0 if correct, 0.0 if incorrect.
+	if len(record.Components) == 4 {
+		outcome := 0.0
+		if record.PredictedRootCause == record.ConfirmedRootCause {
+			outcome = 1.0
+		}
+		
+		errorSignal := record.PredictedConfidence - outcome
+		learningRate := 0.01
+
+		sum := 0.0
+		for i := 0; i < 4; i++ {
+			// Gradient of squared error w.r.t weight[i] is roughly errorSignal * component[i]
+			s.learnedWeights[i] -= learningRate * errorSignal * record.Components[i]
+			if s.learnedWeights[i] < 0.05 {
+				s.learnedWeights[i] = 0.05 // Floor to prevent zeroing out
+			}
+			sum += s.learnedWeights[i]
+		}
+		
+		// Normalize weights so they sum to 1.0
+		for i := 0; i < 4; i++ {
+			s.learnedWeights[i] /= sum
+		}
+	}
 }
 
 // ComputeECE calculates the Expected Calibration Error based on stored feedback.
@@ -107,4 +142,38 @@ func (s *CalibrationStore) ComputeBrierScore() float64 {
 	}
 
 	return sumSq / float64(len(s.records))
+}
+
+// GetLearnedWeights returns the calibrated weights for confidence components.
+func (s *CalibrationStore) GetLearnedWeights() []float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	// Copy to avoid race
+	w := make([]float64, 4)
+	copy(w, s.learnedWeights)
+	return w
+}
+
+// CalibrationReport contains diagnostics for production validation.
+type CalibrationReport struct {
+	ECE                   float64 `json:"expected_calibration_error"`
+	BrierScore            float64 `json:"brier_score"`
+	TotalSamples          int     `json:"total_samples"`
+	CalibrationTrendSlope float64 `json:"calibration_trend_slope"`
+	LearnedWeights        []float64 `json:"learned_weights"`
+}
+
+// GenerateReport produces the full calibration diagnostics.
+func (s *CalibrationStore) GenerateReport() CalibrationReport {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return CalibrationReport{
+		ECE:          s.ComputeECE(10), // Using 10 bins
+		BrierScore:   s.ComputeBrierScore(),
+		TotalSamples: len(s.records),
+		CalibrationTrendSlope: 0.0, // Stub for drift detection
+		LearnedWeights: s.GetLearnedWeights(),
+	}
 }
