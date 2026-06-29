@@ -17,6 +17,7 @@ import (
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
 	"absia/pkg/policy"
+	"absia/pkg/receivers"
 	"absia/pkg/telemetry"
 )
 
@@ -33,6 +34,10 @@ func main() {
 	
 	// ── Telemetry initialization
 	telemetry.SetTracker(telemetry.NewExpvarTracker())
+
+	// ── Phase 2: Start OTLP Receiver
+	otelReceiver := receivers.NewOTLPReceiver(store)
+	otelReceiver.Start(4318)
 
 	// ── Docker autodiscovery (plug-and-play, graceful degradation)
 	// Checks runtime availability at startup. Order: Docker -> Containerd -> CRI-O -> cgroups.
