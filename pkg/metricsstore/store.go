@@ -16,8 +16,10 @@ type NodeSample struct {
 	MemoryPressure  float64
 	NetworkPressure float64
 	DominantSignal  string
-	Timestamp   float64   // unix seconds (float for pipeline compatibility)
-	WallTime    time.Time // wall-clock time for human logging
+	Timestamp       float64   // unix seconds (float for pipeline compatibility)
+	WallTime        time.Time // wall-clock time for human logging
+	MetricSource    string    // "otel" | "docker" | "synthetic"
+	MetricQuality   float64   // 0.0-1.0 confidence in metrics
 }
 
 // Store is a concurrent-safe sliding-window time-series store.
