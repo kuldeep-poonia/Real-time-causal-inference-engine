@@ -22,6 +22,7 @@ import (
 	"absia/pkg/logger"
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
+	"absia/pkg/topology"
 )
 
 /*
@@ -46,6 +47,7 @@ No response is returned without safety evaluation.
 
 // globalStore is injected by SetStore before StartServer is called.
 var globalStore *metricsstore.Store
+var globalTopoMgr *topology.Manager
 
 // globalLog is the base structured logger for all handler logging.
 var globalLog *slog.Logger
@@ -179,6 +181,11 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 // Must be called before StartServer.
 func SetStore(s *metricsstore.Store) {
 	globalStore = s
+}
+
+// SetTopologyManager injects the topology manager into the API handlers.
+func SetTopologyManager(t *topology.Manager) {
+	globalTopoMgr = t
 }
 
 // SetAPIKey is preserved for backwards compatibility and tests.
@@ -497,7 +504,7 @@ func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 // Metric values are pulled from the store — the request body only needs node_id.
 func runPipeline(w http.ResponseWriter, req MetricsRequest) (*orchestrator.PipelineResult, bool) {
 	nodeID := req.nodeID()
-	result, err := orchestrator.ExecuteFullPipelineFromStore(nodeID, globalStore)
+	result, err := orchestrator.ExecuteFullPipelineFromStore(nodeID, globalStore, globalTopoMgr)
 	if err != nil {
 		status := http.StatusUnprocessableEntity
 		if globalStore == nil || !globalStore.HasRealData() {
