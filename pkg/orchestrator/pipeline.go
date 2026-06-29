@@ -250,6 +250,21 @@ func ExecuteFullPipelineFromStore(
 		return nil, fmt.Errorf("insufficient data: need at least 4 samples per container (collecting every 8s, real analysis starts after ~32s)")
 	}
 
+	avgMetricQuality := 0.6 // default to mid-quality if we can't determine
+	if store != nil {
+		totalQ := 0.0
+		count := 0
+		for _, nodeID := range realisticData.Nodes {
+			if sample, ok := store.GetLatestSample(nodeID); ok {
+				totalQ += sample.MetricQuality
+				count++
+			}
+		}
+		if count > 0 {
+			avgMetricQuality = totalQ / float64(count)
+		}
+	}
+
 	result.DataSource = "real"
 
 	log.Printf("[ORCHESTRATOR] Starting pipeline: nodes=%v timesteps=%d",
@@ -698,7 +713,7 @@ func ExecuteFullPipelineFromStore(
 		}
 	}
 
-	result.SafetyResult = evaluateSafetyGateFull(phase5Graph, phase5Exp, result.Phase3Result, targetNodeID, prevRanking)
+	result.SafetyResult = evaluateSafetyGateFull(phase5Graph, phase5Exp, result.Phase3Result, targetNodeID, prevRanking, avgMetricQuality)
 
 	if result.SafetyResult.Fallback.IsUnknown {
 		log.Printf("  -> SAFETY GATE: UNKNOWN reasons=%v conf=%.3f risk=%s",
@@ -727,12 +742,13 @@ func evaluateSafetyGateFull(
 	phase3Result *phase3.InferenceResult,
 	target string,
 	prevRanking []string,
+	metricQuality float64,
 ) *SafetyResult {
 	p3Root := ""
 	if phase3Result != nil && len(phase3Result.Causes) > 0 {
 		p3Root = phase3Result.Causes[0].Node
 	}
-	report := RunSafetyGate(graph, exp, prevRanking, target)
+	report := RunSafetyGate(graph, exp, prevRanking, target, metricQuality)
 	fusion := phase5.FuseCausalResults(graph, p3Root, exp.Causes, target)
 	return &SafetyResult{
 		LatentRisk: report.LatentReport,
@@ -748,7 +764,7 @@ func evaluateSafetyGateEmpty(target string) *SafetyResult {
 	}
 	emptyFusion := phase5.FusionResult{}
 	latent := phase5.AssessLatentRisk(nil, empty, nil, target)
-	conf := phase5.ComputeConfidence(emptyFusion, nil, empty, latent)
+	conf := phase5.ComputeConfidence(emptyFusion, nil, empty, latent, 0.5)
 	fallback := phase5.EvaluateFallback(conf, latent, emptyFusion, nil, target)
 	return &SafetyResult{LatentRisk: latent, Confidence: conf, Fallback: fallback, Fusion: emptyFusion}
 }
