@@ -125,17 +125,45 @@ func (e *PCMCIEngine) DiscoverGraph(nodes map[string][]float64, minSamples int) 
 			y := nodeIDs[j]
 			
 			// Test lag 1 for causality direction X -> Y
-			corr, pVal := e.RunMCI(x, y, nodes[x], nodes[y], 1)
+			corr, adjustedPVal := e.RunMCI(x, y, nodes[x], nodes[y], 1)
 			
-			// If significant according to alpha threshold
-			if pVal < e.Alpha && corr > 0.1 {
+			// We check the raw prior to decide if it's epistemic
+			prior := 0.5
+			if e.TopologyManager != nil {
+				prior = e.TopologyManager.GetEdgePrior(x, y)
+			}
+
+			// If it passes standard statistical test with some correlation
+			isMeasured := adjustedPVal < e.Alpha && corr > 0.1
+			// If it fails the standard test but has a very strong OTel topological prior
+			isInferred := !isMeasured && prior > 0.8
+			
+			if isMeasured || isInferred {
+				source := EdgeSourceObserved
+				uncertainty := adjustedPVal
+				evidence := "measured_correlation"
+				
+				if isInferred {
+					source = EdgeSourceInferred
+					// Uncertainty is high because we didn't measure it directly
+					uncertainty = 0.8 
+					evidence = "otel_topology_prior"
+					// We artificially boost existence prob so the causal builder doesn't drop it
+					adjustedPVal = 1.0 - prior 
+					// Give it a synthetic minimal strength so it routes
+					if corr < 0.05 { corr = 0.05 }
+				}
+
 				g.Edges = append(g.Edges, &Edge{
 					From:           x,
 					To:             y,
-					ExistenceProb:  1.0 - pVal,
+					ExistenceProb:  1.0 - adjustedPVal,
 					CausalStrength: corr,
 					SourceSeries:   nodes[x],
 					TargetSeries:   nodes[y],
+					Source:         source,
+					Uncertainty:    uncertainty,
+					EvidenceBasis:  evidence,
 				})
 			}
 		}
