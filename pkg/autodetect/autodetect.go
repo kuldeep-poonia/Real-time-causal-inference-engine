@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -237,6 +238,15 @@ func collectOne(
 	name := containerName(c.Names, c.ID)
 	now := time.Now()
 
+	// 0. Fallback Chain Check (OTLP > Docker)
+	if latest, ok := store.GetLatestSample(name); ok {
+		if latest.MetricSource == "otel" && time.Since(latest.WallTime) < 15*time.Second {
+			// We have fresh, high-quality OTLP data. Skip Docker polling.
+			return
+		}
+		// In a full implementation, this is where we'd check detectServiceMesh and scrape Envoy.
+	}
+
 	// 3. Write into the standard pipeline store
 	store.Put(name, metricsstore.NodeSample{
 		ArrivalRate:     fused.ArrivalRate,
@@ -248,6 +258,8 @@ func collectOne(
 		DominantSignal:  fused.DominantSignal,
 		Timestamp:       float64(now.Unix()),
 		WallTime:        now,
+		MetricSource:    "docker",
+		MetricQuality:   0.6, // Mid-quality fallback
 	})
 
 	log.Debug("autodetect: sample recorded",
@@ -293,10 +305,27 @@ func shortID(id string) string {
 }
 
 // pct formats a fraction as "XX.X%" for debug log output.
-func pct(f float64) string {
-	v := f * 100
+func pct(val float64) string {
+	v := val * 100
 	if v < 0 {
 		v = 0
 	}
-	return fmt.Sprintf("%.1f%%", v)
+	return fmt.Sprintf("%.2f%%", val*100)
+}
+
+// detectServiceMesh checks if an Envoy or Linkerd sidecar metrics endpoint is available.
+func detectServiceMesh(containerIP string) bool {
+	if containerIP == "" {
+		return false
+	}
+	// Check standard Envoy admin / Prometheus port
+	client := http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://%s:15000/stats/prometheus", containerIP))
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == 200 {
+			return true
+		}
+	}
+	return false
 }
