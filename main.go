@@ -19,6 +19,7 @@ import (
 	"absia/pkg/policy"
 	"absia/pkg/receivers"
 	"absia/pkg/telemetry"
+	"absia/pkg/topology"
 )
 
 func main() {
@@ -35,8 +36,11 @@ func main() {
 	// ── Telemetry initialization
 	telemetry.SetTracker(telemetry.NewExpvarTracker())
 
+	// ── Phase 3: Topology Discovery
+	topoMgr := topology.NewManager()
+
 	// ── Phase 2: Start OTLP Receiver
-	otelReceiver := receivers.NewOTLPReceiver(store)
+	otelReceiver := receivers.NewOTLPReceiver(store, topoMgr)
 	otelReceiver.Start(4318)
 
 	// ── Docker autodiscovery (plug-and-play, graceful degradation)
@@ -86,6 +90,7 @@ func main() {
 
 	// ── Wire the metrics store and configuration into the API layer
 	api.SetStore(store)
+	api.SetTopologyManager(topoMgr)
 	api.SetLogger(structLog)
 	
 	// Start config hot-reloading background process
