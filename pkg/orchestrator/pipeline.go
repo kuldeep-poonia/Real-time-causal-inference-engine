@@ -14,6 +14,7 @@ import (
 	"absia/pkg/metricsstore"
 	"absia/pkg/policy"
 	"absia/pkg/telemetry"
+	"absia/pkg/topology"
 
 	phase1 "absia/internal/intelligence/phase1_signal"
 	phase2 "absia/internal/intelligence/phase2_pattern"
@@ -214,6 +215,7 @@ func setPrevRanking(target string, causes []string) {
 func ExecuteFullPipelineFromStore(
 	targetNodeIDHint string,
 	store *metricsstore.Store,
+	topoMgr *topology.Manager,
 ) (*PipelineResult, error) {
 
 	startTime := time.Now()
@@ -413,11 +415,16 @@ func ExecuteFullPipelineFromStore(
 
 	temporalGraph := buildTemporalGraph(realisticData)
 
-	probCfg := phase3.ProbabilityConfig{
-		MinSamples: 4, LagSteps: []int{0, 1, 2},
-		TimeTolerance: 30 * time.Second, DirectionThreshold: 0.1,
+	// Create PCMCI engine and discover graph
+	pcmciEngine := phase3.NewPCMCIEngine(topoMgr)
+	
+	seriesMap := make(map[string][]float64)
+	for _, nodeID := range realisticData.Nodes {
+		seriesMap[nodeID] = data.ExtractTimeSeries(realisticData, nodeID)
 	}
-	discoveredGraph := phase3.UpdateGraphProbabilities(temporalGraph, probCfg)
+	
+	discoveredGraph := pcmciEngine.DiscoverGraph(seriesMap, 4)
+	
 	log.Printf("  -> discovered: %d nodes %d edges",
 		len(discoveredGraph.Nodes), len(discoveredGraph.Edges))
 
