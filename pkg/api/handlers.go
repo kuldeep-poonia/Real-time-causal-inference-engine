@@ -317,6 +317,10 @@ type SafetyGate struct {
 	CausalContribution    float64 `json:"causal_contribution,omitempty"`
 	PhysicsContribution   float64 `json:"physics_contribution,omitempty"`
 	TelemetryContribution float64 `json:"telemetry_contribution,omitempty"`
+
+	// Phase 4: Diagnostics
+	MissingServices      []string `json:"missing_services,omitempty"`
+	GraphCoveragePercent float64  `json:"graph_coverage_percent,omitempty"`
 }
 
 type AnalysisResponse struct {
@@ -459,6 +463,19 @@ func FeedbackHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": "Feedback recorded. ECE and Brier scores updated.",
+	})
+}
+
+// CalibrationHandler returns the full diagnostic report of the confidence engine.
+func CalibrationHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	report := globalCalib.GenerateReport()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"report":  report,
 	})
 }
 
@@ -809,30 +826,40 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sg := buildSafetyGate(result.SafetyResult)
-
 	// Build node states map for failure semantics.
 	nodeStatesMap := result.GetNodeStatesMap()
 	sem := orchestrator.BuildFailureSemantics(result, nodeID, nodeStatesMap)
-
-	// Generate confidence narrative and incident title.
-	confNarrative := ""
-	if result.SafetyResult != nil {
-		c := result.SafetyResult.Confidence
-		confNarrative = orchestrator.ConfidenceNarrative(
-			c.Score,
-			c.Components.Determinism,
-			c.Components.PosteriorPrecision,
-			c.Components.ResidualExplained,
-			c.Components.RoleConsistency,
-			sg.LatentRisk,
-			"",
-		)
+	
+	// Evaluate missing services
+	var missingServices []string
+	coverage := 1.0
+	if globalTopoMgr != nil {
+		observedNodes := make([]string, 0, len(req.Nodes))
+		for _, n := range req.Nodes {
+			observedNodes = append(observedNodes, n.NodeID)
+		}
+		if len(observedNodes) == 0 { // For implicit mode
+			observedNodes = result.RealisticData.Nodes
+		}
+		missingServices = globalTopoMgr.GetMissingServices(observedNodes)
+		if total := len(observedNodes) + len(missingServices); total > 0 {
+			coverage = float64(len(observedNodes)) / float64(total)
+		}
 	}
-	title := orchestrator.IncidentTitle(sem)
-	narrative := orchestrator.OperationalNarrative(sem)
+	
+	// Incorporate into SafetyGate
+	sg.MissingServices = missingServices
+	sg.GraphCoveragePercent = coverage * 100.0
+
+	// Use Single Source of Truth FSM
+	var stats confidence.MCOutput
+	if result.SafetyResult != nil {
+		stats = result.SafetyResult.Confidence.Stats
+	}
+	decision := confidence.GenerateDecision(nodeID, sg.ConfidenceScore, sg.LatentRisk, stats, missingServices)
 
 	// Cache for /explore and /semantics endpoints.
-	cacheSemantics(sem, confNarrative, title)
+	cacheSemantics(sem, decision.ConfidenceNarrative, decision.IncidentTitle)
 
 	resp := AnalysisResponse{
 		Success:             true,
@@ -846,16 +873,16 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		LatentRisk:          sg.LatentRisk,
 		FallbackTriggered:   sg.FallbackTriggered,
 		Safety:              sg,
-		OperationalState:    string(sem.State),
-		IncidentTitle:       title,
-		FailureCategory:     string(sem.Category),
-		ConfidenceNarrative: confNarrative,
-		Severity:            sem.Severity,
+		OperationalState:    decision.OperationalState,
+		IncidentTitle:       decision.IncidentTitle,
+		FailureCategory:     decision.FailureCategory,
+		ConfidenceNarrative: decision.ConfidenceNarrative,
+		Severity:            decision.Severity,
 		BlastRadius:         sem.BlastRadius,
-		Timeline:            sem.Timeline,
-		Narrative:           narrative,
+		Timeline:            decision.Timeline,
+		Narrative:           decision.Narrative,
 		Evidence:            sem.Evidence,
-		Remediation:         sem.Remediation,
+		Remediation:         sem.Remediations,
 	}
 
 	if sample, ok := globalStore.GetLatestSample(nodeID); ok {
@@ -1159,6 +1186,7 @@ func SetupRoutes(base *slog.Logger) {
 	http.Handle("/explore", chainRL(ExploreHandler))
 	http.Handle("/semantics", chain(SemanticsHandler))
 	http.Handle("/feedback", chainRL(FeedbackHandler))
+	http.Handle("/calibration", chain(CalibrationHandler))
 
 	// Expose unused report
 	http.Handle("/api/v1/unused-report", chain(UnusedReportHandler))
