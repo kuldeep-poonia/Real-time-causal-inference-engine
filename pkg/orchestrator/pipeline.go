@@ -485,6 +485,18 @@ func ExecuteFullPipelineFromStore(
 	targetNodeID := resolveTarget(targetNodeIDHint, realisticData.Nodes, discoveredGraph)
 	nodeStatesMap := buildNodeStatesMap(discoveredGraph)
 
+	if len(realisticData.Points) < 10 {
+		log.Printf("[ORCHESTRATOR] Phase 3 skipped: need 10+ samples, have %d", len(realisticData.Points))
+		result.ErrorsEncountered = append(result.ErrorsEncountered, 
+			fmt.Sprintf("Phase 3 skipped: need 10+ samples, have %d; using queue-physics fallback", len(realisticData.Points)))
+		if finishWithLocalPhysicsRoot(result, targetNodeID, nodeStatesMap, startTime) {
+			return result, nil
+		}
+		result.SafetyResult = evaluateSafetyGateEmpty(targetNodeID)
+		result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
+		return result, nil
+	}
+
 	const causalMinProbability = 0.1
 	const causalMinStrength = 0.05
 
