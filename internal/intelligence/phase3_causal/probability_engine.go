@@ -274,10 +274,26 @@ func corrToStats(corr float64, n int) (float64, float64) {
 		if n <= 3 {
 			return 0, 1
 		}
+		
+		// Clamp floating point inaccuracies to the strict mathematical domain [-1, 1]
+		// This prevents math.Atanh from returning NaN when corr is e.g. 1.0000000000000002
+		
+		log.Printf("DEBUG corrToStats input: corr=%.10f n=%d", corr, n)
+		
+		if corr > 1.0 {
+			corr = 1.0
+		} else if corr < -1.0 {
+			corr = -1.0
+		}
+
 		z := math.Atanh(corr)
 		se := 1.0 / math.Sqrt(float64(n-3))
 		p := 2 * (1 - normalCDF(math.Abs(z/se)))
 		prob = 1 - p
+		
+		log.Printf("DEBUG corrToStats: z=%.10f se=%.10f", z, se)
+		log.Printf("DEBUG corrToStats: p=%.10f", p)
+		log.Printf("DEBUG prob before return: %.10f", prob)
 	}
 
 	// Clamp to [0, 1]

@@ -91,14 +91,17 @@ func filterStrongEdges(edges []*Edge, cfg CausalBuilderConfig) []*Edge {
 	var result []*Edge
 
 	for _, e := range edges {
+		log.Printf("DEBUG edge %s->%s: prob=%.6f str=%.6f",
+			e.From, e.To, e.ExistenceProb, math.Abs(e.CausalStrength))
+
 		if e.ExistenceProb >= cfg.MinProbability &&
-	abs(e.CausalStrength) >= cfg.MinStrength &&
-	len(e.SourceSeries) > 3 &&
-	len(e.TargetSeries) > 3 {
+			math.Abs(e.CausalStrength) >= cfg.MinStrength &&
+			len(e.SourceSeries) > 3 &&
+			len(e.TargetSeries) > 3 {
 			result = append(result, e)
 		} else {
-			log.Printf("Hypothesis %s->%s rejected: prob=%.3f minProb=%.3f str=%.3f minStr=%.3f lenS=%d lenT=%d", 
-				e.From, e.To, e.ExistenceProb, cfg.MinProbability, abs(e.CausalStrength), cfg.MinStrength, len(e.SourceSeries), len(e.TargetSeries))
+			log.Printf("Hypothesis %s->%s rejected: prob=%.3f minProb=%.3f str=%.3f minStr=%.3f lenS=%d lenT=%d",
+				e.From, e.To, e.ExistenceProb, cfg.MinProbability, math.Abs(e.CausalStrength), cfg.MinStrength, len(e.SourceSeries), len(e.TargetSeries))
 		}
 	}
 
