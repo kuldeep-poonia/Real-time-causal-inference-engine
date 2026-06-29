@@ -119,12 +119,31 @@ func (e *MCEngine) RunAdaptive(means []float64, L [][]float64, weights []float64
 	p05 := samples[int(0.05*n)]
 	p95 := samples[int(0.95*n)]
 
-	// Simple entropy estimation of the continuous distribution assuming normality
-	// H(x) = 0.5 * ln(2 * pi * e * sigma^2)
-	entropy := 0.0
-	if std > 0 {
-		entropy = 0.5 * math.Log(2*math.Pi*math.E*std*std)
+	// Phase 4 Advanced: Normalized Discrete Entropy
+	// We bin the samples into 20 bins between 0.0 and 1.0 to compute Shannon entropy,
+	// then normalize by log(numBins) so it is strictly bounded [0, 1].
+	numBins := 20
+	bins := make([]int, numBins)
+	for _, s := range samples {
+		idx := int(s * float64(numBins))
+		if idx >= numBins {
+			idx = numBins - 1
+		}
+		if idx < 0 {
+			idx = 0
+		}
+		bins[idx]++
 	}
+
+	entropy := 0.0
+	for _, count := range bins {
+		if count > 0 {
+			p := float64(count) / n
+			entropy -= p * math.Log(p)
+		}
+	}
+	// Normalize to [0, 1]
+	entropy = entropy / math.Log(float64(numBins))
 
 	// Aleatoric vs Epistemic approximation
 	// We'll define Aleatoric as the intrinsic variance of the sampling (std^2)
