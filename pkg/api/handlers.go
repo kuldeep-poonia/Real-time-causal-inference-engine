@@ -23,6 +23,7 @@ import (
 	"absia/pkg/metricsstore"
 	"absia/pkg/orchestrator"
 	"absia/pkg/topology"
+	"absia/pkg/confidence"
 )
 
 /*
@@ -45,12 +46,13 @@ All responses include safety gate fields:
 No response is returned without safety evaluation.
 */
 
-// globalStore is injected by SetStore before StartServer is called.
-var globalStore *metricsstore.Store
-var globalTopoMgr *topology.Manager
-
-// globalLog is the base structured logger for all handler logging.
-var globalLog *slog.Logger
+// Global stores for stateful components (populated at startup).
+var (
+	globalStore   *metricsstore.Store
+	globalTopoMgr *topology.Manager
+	globalLog     *slog.Logger
+	globalCalib   = confidence.NewCalibrationStore()
+)
 
 // globalSemanticsMu guards globalLastSemantics.
 var globalSemanticsMu sync.RWMutex
@@ -299,6 +301,22 @@ type SafetyGate struct {
 	PosteriorVariance float64  `json:"posterior_variance"`
 	PosteriorPrecision float64  `json:"posterior_precision"`
 	Determinism       float64  `json:"determinism"`
+
+	// Phase 4: Confidence Statistics
+	ConfidenceStd        float64 `json:"confidence_std,omitempty"`
+	ConfidenceMedian     float64 `json:"confidence_median,omitempty"`
+	ConfidenceP05        float64 `json:"confidence_p05,omitempty"`
+	ConfidenceP95        float64 `json:"confidence_p95,omitempty"`
+	ConfidenceEntropy    float64 `json:"confidence_entropy,omitempty"`
+	SampleCount          int     `json:"sample_count,omitempty"`
+	AleatoricUncertainty float64 `json:"aleatoric_uncertainty,omitempty"`
+	EpistemicUncertainty float64 `json:"epistemic_uncertainty,omitempty"`
+
+	// Phase 4: Confidence Decomposition
+	BayesianContribution  float64 `json:"bayesian_contribution,omitempty"`
+	CausalContribution    float64 `json:"causal_contribution,omitempty"`
+	PhysicsContribution   float64 `json:"physics_contribution,omitempty"`
+	TelemetryContribution float64 `json:"telemetry_contribution,omitempty"`
 }
 
 type AnalysisResponse struct {
@@ -424,6 +442,26 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 }
 
+// FeedbackHandler accepts human verification of a prediction for calibration.
+func FeedbackHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var payload confidence.FeedbackRecord
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Success: false, Errors: []string{"invalid JSON"}})
+		return
+	}
+
+	globalCalib.RecordFeedback(payload)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Feedback recorded. ECE and Brier scores updated.",
+	})
+}
+
 // decodeAndValidate enforces the body size limit, decodes JSON, and
 // validates field constraints. Returns false and writes the error response
 // when validation fails.
@@ -547,6 +585,21 @@ func buildSafetyGate(sr *orchestrator.SafetyResult) SafetyGate {
 		PosteriorVariance: sr.LatentRisk.PosteriorVariance,
 		PosteriorPrecision: sr.Confidence.Components.PosteriorPrecision,
 		Determinism:       sr.Confidence.Components.Determinism,
+
+		// Phase 4 additions
+		ConfidenceStd:        sr.Confidence.Stats.Std,
+		ConfidenceMedian:     sr.Confidence.Stats.Median,
+		ConfidenceP05:        sr.Confidence.Stats.P05,
+		ConfidenceP95:        sr.Confidence.Stats.P95,
+		ConfidenceEntropy:    sr.Confidence.Stats.Entropy,
+		SampleCount:          sr.Confidence.Stats.SampleCount,
+		AleatoricUncertainty: sr.Confidence.Stats.AleatoricUncert,
+		EpistemicUncertainty: sr.Confidence.Stats.EpistemicUncert,
+
+		BayesianContribution:  sr.Confidence.Components.PosteriorPrecision,
+		CausalContribution:    sr.Confidence.Components.Determinism, // Mapping Determinism/Role Consistency to causal
+		PhysicsContribution:   sr.Confidence.Components.ResidualExplained,
+		TelemetryContribution: 1.0, // Assuming static metric quality or derived
 	}
 }
 
@@ -1103,9 +1156,9 @@ func SetupRoutes(base *slog.Logger) {
 	http.Handle("/explain", chainRL(ExplainHandler))
 	http.Handle("/act", chainRL(ActHandler))
 
-	// Incident intelligence endpoints.
 	http.Handle("/explore", chainRL(ExploreHandler))
 	http.Handle("/semantics", chain(SemanticsHandler))
+	http.Handle("/feedback", chainRL(FeedbackHandler))
 
 	// Expose unused report
 	http.Handle("/api/v1/unused-report", chain(UnusedReportHandler))
