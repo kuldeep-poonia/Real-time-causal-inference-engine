@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"absia/pkg/adaptive"
+	"absia/pkg/confidence"
 )
 
 /*
@@ -72,6 +73,7 @@ type ConfidenceReport struct {
 	Score      float64            // bounded [0.0, 1.0]
 	State      ConfidenceState
 	Components ConfidenceComponents
+	Stats      confidence.MCOutput // Phase 4 Monte Carlo Statistics
 }
 
 // ConfidenceComponents breaks down the score into its constituent signals.
@@ -181,7 +183,7 @@ func ComputeConfidence(
 	}
 	wPrec, wDet, wRes, wRole := computeDynamicWeights(comps, rootCause)
 
-	// Linear score composition, scaled by metric quality.
+	// Linear score composition for the baseline
 	raw := (wPrec*comps.PosteriorPrecision +
 		wDet*comps.Determinism +
 		wRes*comps.ResidualExplained +
@@ -190,6 +192,27 @@ func ComputeConfidence(
 	raw -= comps.LatentPenalty
 
 	score := math.Max(0.0, math.Min(1.0, raw))
+
+	// Phase 4: Run Monte Carlo Engine
+	mcEngine := confidence.NewMCEngine()
+	means := []float64{
+		comps.PosteriorPrecision, 
+		comps.Determinism, 
+		comps.ResidualExplained, 
+		comps.RoleConsistency,
+	}
+	weights := []float64{wPrec, wDet, wRes, wRole}
+	
+	// Base variance scaled by latent penalty (higher risk = higher variance)
+	baseVar := 0.01
+	if latent.Level == LatentRiskHigh { baseVar = 0.05 }
+	if latent.Level == LatentRiskMedium { baseVar = 0.02 }
+	
+	L := confidence.BuildCholesky(baseVar)
+	mcOutput := mcEngine.RunAdaptive(means, L, weights, 5000, 0.01)
+
+	// Update score with Monte Carlo mean (more robust)
+	score = math.Max(0.0, math.Min(1.0, mcOutput.Mean - comps.LatentPenalty))
 
 	// State classification.
 	// Safety invariant: LatentRiskHigh forces UNKNOWN unconditionally.
@@ -212,6 +235,7 @@ func ComputeConfidence(
 		Score:      score,
 		State:      state,
 		Components: comps,
+		Stats:      mcOutput,
 	}
 }
 
