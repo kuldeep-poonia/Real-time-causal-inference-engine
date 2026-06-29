@@ -129,7 +129,7 @@ func TestHiddenConfounderSuspicion(t *testing.T) {
 	}
 
 	latent := AssessLatentRisk(graph, exp, nil, "C")
-	conf := ComputeConfidence(fusion, graph, exp, latent)
+	conf := ComputeConfidence(fusion, graph, exp, latent, 1.0)
 	fallback := EvaluateFallback(conf, latent, fusion, graph, "C")
 
 	logTrustResult(t, "HiddenConfounderSuspicion",
@@ -218,7 +218,7 @@ func TestNoPathHighCorrelation(t *testing.T) {
 	}
 
 	latent := AssessLatentRisk(graph, exp, nil, "C")
-	conf := ComputeConfidence(fusion, graph, exp, latent)
+	conf := ComputeConfidence(fusion, graph, exp, latent, 1.0)
 
 	expectedNormD := 0.80 / (0.10 + 0.80)
 	logTrustResult(t, "NoPathHighCorrelation",
@@ -300,7 +300,7 @@ func TestLowResidualExplanation(t *testing.T) {
 	}
 
 	latent := AssessLatentRisk(graph, exp, nil, "C")
-	conf := ComputeConfidence(fusion, graph, exp, latent)
+	conf := ComputeConfidence(fusion, graph, exp, latent, 1.0)
 
 	expectedResidual := 0.10 / (0.10 + 0.75)
 	logTrustResult(t, "LowResidualExplanation",
@@ -371,7 +371,7 @@ func TestUnstableRanking(t *testing.T) {
 	latent := AssessLatentRisk(graph, exp, prevRanking, "C")
 	conf := ComputeConfidence(
 		FusionResult{RootCauses: []string{"A"}, Mediators: []string{"B"}, Rejected: []string{}},
-		graph, exp, latent,
+		graph, exp, latent, 1.0,
 	)
 
 	logTrustResult(t, "UnstableRanking",
@@ -453,7 +453,7 @@ func TestConfidenceDowngradeOnLatentHigh(t *testing.T) {
 		SuspiciousNodes:  []string{"ghost_node"},
 	}
 
-	conf := ComputeConfidence(fusion, graph, exp, latentHighManual)
+	conf := ComputeConfidence(fusion, graph, exp, latentHighManual, 1.0)
 
 	logTrustResult(t, "ConfidenceDowngradeOnLatentHigh",
 		confirmedThreshold, conf.Score,
@@ -658,7 +658,7 @@ func TestDeterministicRepeatedScores(t *testing.T) {
 			[]*CausalEdge{tEdge(A, B), tEdge(B, C)},
 		)
 		latent := AssessLatentRisk(graph, exp, prevRanking, nodeName)
-		conf := ComputeConfidence(fusion, graph, exp, latent)
+		conf := ComputeConfidence(fusion, graph, exp, latent, 1.0)
 		results[i] = snapshot{
 			corrScore:   latent.CorrelationScore,
 			residual:    latent.ResidualRatio,
@@ -728,7 +728,7 @@ func TestNoFalseDowngradeOnValidDAG(t *testing.T) {
 	}
 
 	latent := AssessLatentRisk(graph, exp, prevRanking, "C")
-	conf := ComputeConfidence(fusion, graph, exp, latent)
+	conf := ComputeConfidence(fusion, graph, exp, latent, 1.0)
 	fallback := EvaluateFallback(conf, latent, fusion, graph, "C")
 
 	logTrustResult(t, "NoFalseDowngradeOnValidDAG",
@@ -875,7 +875,7 @@ func TestNilGraphSafety(t *testing.T) {
 	fusion := FusionResult{RootCauses: []string{"A"}, Mediators: []string{}, Rejected: []string{}}
 
 	latent := AssessLatentRisk(nil, exp, nil, "C")
-	conf := ComputeConfidence(fusion, nil, exp, latent)
+	conf := ComputeConfidence(fusion, nil, exp, latent, 1.0)
 	fallback := EvaluateFallback(conf, latent, fusion, nil, "C")
 
 	logTrustResult(t, "NilGraphSafety",
@@ -937,7 +937,7 @@ func TestMediumRiskBoundary(t *testing.T) {
 	}
 
 	latent := AssessLatentRisk(graph, medExp, nil, "C_Med")
-	conf := ComputeConfidence(fusion, graph, medExp, latent)
+	conf := ComputeConfidence(fusion, graph, medExp, latent, 1.0)
 
 	expectedVariance := 0.3125 // 0.05 / 0.40^2
 	logTrustResult(t, "MediumRiskBoundary",
