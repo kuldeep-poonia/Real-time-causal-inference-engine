@@ -252,7 +252,7 @@ func TestSafetyGate(t *testing.T) {
 
 	confCorrect := 0
 	for _, tc := range confTCs {
-		conf := phase5.ComputeConfidence(tc.fusion, tc.graph, tc.exp, tc.latent)
+		conf := phase5.ComputeConfidence(tc.fusion, tc.graph, tc.exp, tc.latent, 1.0)
 		ok := conf.State == tc.expect
 		if ok { confCorrect++ }
 
@@ -325,7 +325,7 @@ func TestSafetyGate(t *testing.T) {
 		if tc.graph != nil {
 			fusion = phase5.FuseCausalResults(tc.graph, "", tc.exp.Causes, tc.target)
 		}
-		conf := phase5.ComputeConfidence(fusion, tc.graph, tc.exp, latent)
+		conf := phase5.ComputeConfidence(fusion, tc.graph, tc.exp, latent, 1.0)
 		fb := phase5.EvaluateFallback(conf, latent, fusion, tc.graph, tc.target)
 
 		ok := fb.IsUnknown == tc.expectU
@@ -353,7 +353,7 @@ func TestSafetyGate(t *testing.T) {
 		exp := phase5.Explanation{Causes: []string{"A","B"}, Effects: map[string]float64{"A": 1.0, "B": 1.0}, Uncertainty: map[string]float64{}}
 		lat := phase5.LatentRiskReport{Level: phase5.LatentRiskHigh, PosteriorVariance: 0.9, ResidualRatio: 0.9}
 		fusion := phase5.FusionResult{RootCauses: []string{"A"}, Mediators: []string{"B"}}
-		conf := phase5.ComputeConfidence(fusion, g, exp, lat)
+		conf := phase5.ComputeConfidence(fusion, g, exp, lat, 1.0)
 		holds := conf.State == phase5.UnknownState
 		if !holds { t.Errorf("INV-1 VIOLATED: HIGH latent → state=%s score=%.4f", conf.State, conf.Score) }
 		invs = append(invs, InvariantCase{"HIGH_latent→UNKNOWN_unconditional", holds,
@@ -364,7 +364,7 @@ func TestSafetyGate(t *testing.T) {
 	{
 		lat := phase5.AssessLatentRisk(nil, emptyExp, nil, "T")
 		fusion := phase5.FusionResult{}
-		conf := phase5.ComputeConfidence(fusion, nil, emptyExp, lat)
+		conf := phase5.ComputeConfidence(fusion, nil, emptyExp, lat, 1.0)
 		fb := phase5.EvaluateFallback(conf, lat, fusion, nil, "T")
 		holds := fb.IsUnknown
 		if !holds { t.Error("INV-2 VIOLATED: empty explanation should produce UNKNOWN") }
