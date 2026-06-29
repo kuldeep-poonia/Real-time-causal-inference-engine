@@ -35,6 +35,7 @@ func RunSafetyGate(
 	exp phase5.Explanation,
 	prevRanking []string,
 	target string,
+	metricQuality float64,
 ) SafetyReport {
 	// Step 1: Classify causal roles — root causes, mediators, rejected confounders.
 	// FuseCausalResults resolves structural conflicts from Phase 4's explanation
@@ -48,7 +49,7 @@ func RunSafetyGate(
 
 	// Step 3: Compute calibrated confidence score with latent penalty.
 	// Score = weighted(PosteriorPrecision, Determinism, ResidualExplained, RoleConsistency) − LatentPenalty
-	confidence := phase5.ComputeConfidence(fusion, graph, exp, latent)
+	confidence := phase5.ComputeConfidence(fusion, graph, exp, latent, metricQuality)
 
 	// Step 4: Evaluate five-gate safety decision.
 	// Gates: LatentHighRisk, LowConfidence, GraphMismatch, SevereCoverage, RankingInstability.
