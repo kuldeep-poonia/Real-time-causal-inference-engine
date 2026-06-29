@@ -1,6 +1,8 @@
 package phase3_causal
 
-import "time"
+import (
+	"time"
+)
 
 /*
 PHASE 3 → TYPES (EXTENDED)
@@ -58,6 +60,16 @@ const (
 )
 
 /*
+EDGE SOURCE
+*/
+type EdgeSource string
+
+const (
+	EdgeSourceObserved EdgeSource = "Observed"
+	EdgeSourceInferred EdgeSource = "Inferred"
+)
+
+/*
 INTERVENTION EFFECT
 */
 type InterventionEffect struct {
@@ -87,6 +99,12 @@ type Edge struct {
 
 	Mean     float64
 	Variance float64
+
+	// Phase 4 Epistemic Fields
+	Source        EdgeSource
+	Uncertainty   float64
+	EvidenceBasis string
+	ExpiresAt     time.Time
 }
 
 /*
