@@ -382,6 +382,8 @@ type NodeSnapshot struct {
 	NodeID        string  `json:"node_id"`
 	ContainerName string  `json:"container_name,omitempty"`
 	Image         string  `json:"image,omitempty"`
+	MetricSource  string  `json:"metric_source"`
+	MetricQuality float64 `json:"metric_quality"`
 	ArrivalRate     float64 `json:"arrival_rate"`
 	ServiceRate     float64 `json:"service_rate"`
 	QueueLength     float64 `json:"queue_length"`
@@ -630,6 +632,8 @@ func NodesHandler(w http.ResponseWriter, r *http.Request) {
 			NodeID:        id,
 			ContainerName: cname,
 			Image:         cimage,
+			MetricSource:  sample.MetricSource,
+			MetricQuality: sample.MetricQuality,
 			ArrivalRate:     sample.ArrivalRate,
 			ServiceRate:     sample.ServiceRate,
 			QueueLength:     sample.QueueLength,
