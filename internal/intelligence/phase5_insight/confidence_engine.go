@@ -147,7 +147,6 @@ func ComputeConfidence(
 	exp Explanation,
 	latent LatentRiskReport,
 	metricQuality float64,
-	learnedWeights []float64,
 ) ConfidenceReport {
 	comps := ConfidenceComponents{}
 
@@ -177,11 +176,12 @@ func ComputeConfidence(
 		comps.LatentPenalty = latentPenaltyLow
 	}
 
-	// Phase 4 Advanced: Use Learned Weights
-	wPrec, wDet, wRes, wRole := 0.25, 0.25, 0.25, 0.25
-	if len(learnedWeights) == 4 {
-		wPrec, wDet, wRes, wRole = learnedWeights[0], learnedWeights[1], learnedWeights[2], learnedWeights[3]
+	// Dynamic weight calculation based on entropy and observation count.
+	rootCause := ""
+	if len(fusion.RootCauses) > 0 {
+		rootCause = fusion.RootCauses[0]
 	}
+	wPrec, wDet, wRes, wRole := computeDynamicWeights(comps, rootCause)
 
 	// Linear score composition for the baseline
 	raw := (wPrec*comps.PosteriorPrecision +
