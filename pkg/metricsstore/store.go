@@ -36,8 +36,8 @@ type Store struct {
 // New creates a Store with the given sliding-window size.
 // A minimum of 4 samples is enforced (pipeline minimum for correlation).
 func New(windowSize int) *Store {
-	if windowSize < 20 {
-		windowSize = 20
+	if windowSize < 4 {
+		windowSize = 4
 	}
 	return &Store{
 		nodes:      make(map[string][]NodeSample),
@@ -151,4 +151,12 @@ func (s *Store) NodeCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.nodes)
+}
+
+// RemoveNode completely evicts a node's time series from the store.
+// Used when a container is stopped/removed to prevent stale analysis.
+func (s *Store) RemoveNode(nodeID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.nodes, nodeID)
 }
