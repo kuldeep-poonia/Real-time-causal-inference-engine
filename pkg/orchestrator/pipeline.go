@@ -655,8 +655,8 @@ func ExecuteFullPipelineFromStore(
 	//
 	log.Println("[ORCHESTRATOR] Phase 4: explanation generation...")
 
-	phase4Graph := bridge.ConvertPhase3ResultToPhase4Graph(*result.Phase3Result, result.Phase3Graph)
 	phase4Dataset := bridge.ConvertPhase3ResultToPhase4Dataset(result.Phase3Graph)
+	phase4Graph := bridge.ConvertPhase3ResultToPhase4Graph(*result.Phase3Result, result.Phase3Graph, phase4Dataset)
 
 	if err := bridge.ValidateConversionPhase3ToPhase4(phase4Graph); err != nil {
 		result.ErrorsEncountered = append(result.ErrorsEncountered, "Phase 4 graph conversion: "+err.Error())
