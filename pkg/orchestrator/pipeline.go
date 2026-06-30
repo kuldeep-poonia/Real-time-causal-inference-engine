@@ -5,7 +5,9 @@ import (
 	"log"
 	"log/slog"
 	"math"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -420,6 +422,13 @@ func ExecuteFullPipelineFromStore(
 	
 	seriesMap := make(map[string][]float64)
 	for _, nodeID := range realisticData.Nodes {
+		// Exclude infrastructure/observability services from causal candidacy.
+		// These services (e.g., the ABSIA engine itself) should not participate
+		// in root cause ranking unless explicitly configured.
+		if isInfrastructureService(nodeID) {
+			log.Printf("  -> excluding infrastructure service from causal graph: %s", nodeID)
+			continue
+		}
 		seriesMap[nodeID] = data.ExtractTimeSeries(realisticData, nodeID)
 	}
 	
@@ -567,7 +576,20 @@ func ExecuteFullPipelineFromStore(
 
 	hypotheses = applyDSeparationFilter(hypotheses, causalGraph)
 	hypotheses = filterHypothesesForTarget(hypotheses, targetNodeID)
-	log.Printf("  -> D-sep filter: %d hypotheses survive", len(hypotheses))
+	log.Printf("  -> D-sep filter: %d hypotheses survive for target=%s", len(hypotheses), targetNodeID)
+
+	// If the target has no inbound causal edges (it is a traffic source, not a
+	// downstream target), construct a reverse hypothesis from its outgoing
+	// neighbors. This represents backpressure: downstream services affecting
+	// the target's performance via feedback loops.
+	if len(hypotheses) == 0 {
+		reverseH := buildReverseHypothesis(causalGraph, targetNodeID)
+		if reverseH != nil {
+			hypotheses = append(hypotheses, *reverseH)
+			log.Printf("  -> constructed reverse (backpressure) hypothesis for %s with %d edges",
+				targetNodeID, len(reverseH.Subgraph.Edges))
+		}
+	}
 
 	if len(hypotheses) == 0 {
 		result.ErrorsEncountered = append(result.ErrorsEncountered,
@@ -778,34 +800,49 @@ func evaluateSafetyGateEmpty(target string) *SafetyResult {
 
 func evaluateSafetyGateLocal(root phase3.RootCauseResult) *SafetyResult {
 	score := localRootConfidence(root)
-	state := phase5.ProbableState
-	if score >= 0.75 {
+
+	// Derive components from actual telemetry instead of hardcoding to 1.0.
+	// PosteriorPrecision: how precisely we can estimate load (bounded by score itself).
+	posteriorPrecision := score
+	// Determinism: stable if load is well below 1.0, unstable as it approaches/exceeds 1.0.
+	determinism := math.Max(0.0, math.Min(1.0, 1.0-root.Load))
+	// ResidualExplained: fraction of queue that is explainable by the load.
+	residualExplained := score
+	// RoleConsistency: 1.0 only when the root cause is unambiguous.
+	roleConsistency := 0.5 // Physics fallback has no fusion corroboration.
+
+	state := phase5.UnknownState
+	switch {
+	case score >= 0.75:
 		state = phase5.ConfirmedState
+	case score >= 0.45:
+		state = phase5.ProbableState
 	}
 
+	// Latent risk is MEDIUM for physics fallback — we have no causal graph evidence.
 	latent := phase5.LatentRiskReport{
-		Level:           phase5.LatentRiskLow,
-		ResidualRatio:   1.0,
-		PosteriorVariance: 0.0,
-		SuspiciousNodes: []string{},
+		Level:             phase5.LatentRiskMedium,
+		ResidualRatio:     residualExplained,
+		PosteriorVariance: 1.0 - posteriorPrecision,
+		SuspiciousNodes:   []string{},
 	}
 	conf := phase5.ConfidenceReport{
 		Score: score,
 		State: state,
 		Components: phase5.ConfidenceComponents{
-			PosteriorPrecision: 1.0,
-			Determinism:       1.0,
-			ResidualExplained: 1.0,
-			RoleConsistency:   1.0,
-			LatentPenalty:     0.0,
+			PosteriorPrecision: posteriorPrecision,
+			Determinism:        determinism,
+			ResidualExplained:  residualExplained,
+			RoleConsistency:    roleConsistency,
+			LatentPenalty:      0.10, // Medium penalty for missing causal evidence
 		},
 	}
 	fusion := phase5.FusionResult{RootCauses: []string{root.NodeID}}
 	fallback := phase5.FallbackDecision{
-		IsUnknown:         false,
+		IsUnknown:         score < 0.45,
 		RemediationPolicy: phase5.PolicyHumanReview,
 		ConfidenceScore:   score,
-		LatentLevel:       phase5.LatentRiskLow,
+		LatentLevel:       phase5.LatentRiskMedium,
 	}
 	return &SafetyResult{LatentRisk: latent, Confidence: conf, Fallback: fallback, Fusion: fusion}
 }
@@ -1295,4 +1332,111 @@ func (pr *PipelineResult) Summary() string {
 		s += fmt.Sprintf("Errors: %v\n", pr.ErrorsEncountered)
 	}
 	return s
+}
+
+//
+// INFRASTRUCTURE EXCLUSION
+//
+
+// isInfrastructureService returns true if the given node ID belongs to an
+// infrastructure or observability service that should not participate in
+// root cause analysis. The exclusion list is governed by the ABSIA_EXCLUDE_SERVICES
+// environment variable (comma-separated). By default, the absia container itself
+// is always excluded.
+func isInfrastructureService(nodeID string) bool {
+	lower := strings.ToLower(nodeID)
+
+	// Always exclude the absia analysis engine itself
+	if strings.Contains(lower, "absia") {
+		return true
+	}
+
+	// Check configurable exclusion list from environment
+	excludeEnv := os.Getenv("ABSIA_EXCLUDE_SERVICES")
+	if excludeEnv != "" {
+		for _, svc := range strings.Split(excludeEnv, ",") {
+			svc = strings.TrimSpace(strings.ToLower(svc))
+			if svc != "" && strings.Contains(lower, svc) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+//
+// REVERSE HYPOTHESIS BUILDER
+//
+
+// buildReverseHypothesis constructs a causal hypothesis for a target node that
+// has no inbound causal edges. This happens when the target is a traffic source
+// (e.g., frontend) — it sends traffic to downstream services, but no service
+// sends traffic TO it. In this case, the target's performance is affected by
+// backpressure from its downstream neighbors.
+//
+// The hypothesis treats the target's outgoing neighbors as causes affecting it
+// via backpressure. This is statistically valid: if downstream services are slow,
+// the target accumulates pending requests, raising its queue length and latency.
+func buildReverseHypothesis(graph *phase3.Graph, target string) *phase3.CausalHypothesis {
+	if graph == nil {
+		return nil
+	}
+
+	// Collect all outgoing edges from the target
+	var reverseEdges []*phase3.Edge
+	for _, e := range graph.Edges {
+		if e.From == target {
+			// Create a reversed edge: downstream -> target (backpressure direction)
+			rev := &phase3.Edge{
+				From:           e.To,
+				To:             target,
+				ExistenceProb:  e.ExistenceProb * 0.8, // Discount: backpressure is indirect
+				CausalStrength: e.CausalStrength * 0.7,
+				SourceSeries:   e.TargetSeries,
+				TargetSeries:   e.SourceSeries,
+				Source:         phase3.EdgeSourceInferred,
+				Uncertainty:    0.6,
+				EvidenceBasis:  "backpressure_reversal",
+			}
+			reverseEdges = append(reverseEdges, rev)
+		}
+	}
+
+	if len(reverseEdges) == 0 {
+		return nil
+	}
+
+	// Build a subgraph with the reversed edges
+	subgraph := &phase3.Graph{
+		Nodes: make(map[string]*phase3.Node),
+		Edges: reverseEdges,
+	}
+
+	// Copy relevant nodes into the subgraph
+	if n, ok := graph.Nodes[target]; ok {
+		subgraph.Nodes[target] = n
+	}
+	for _, e := range reverseEdges {
+		if n, ok := graph.Nodes[e.From]; ok {
+			subgraph.Nodes[e.From] = n
+		}
+	}
+
+	// Compute combined probability from the reversed edges
+	var totalProb float64
+	for _, e := range reverseEdges {
+		totalProb += e.ExistenceProb
+	}
+	prob := totalProb / float64(len(reverseEdges))
+
+	return &phase3.CausalHypothesis{
+		ID:          fmt.Sprintf("reverse_%s", target),
+		Target:      target,
+		Subgraph:    subgraph,
+		Probability: prob,
+		Mean:        prob,
+		Variance:    0.1, // Higher variance — this is an inferred hypothesis
+		Description: fmt.Sprintf("Backpressure hypothesis: downstream services affecting %s", target),
+	}
 }
