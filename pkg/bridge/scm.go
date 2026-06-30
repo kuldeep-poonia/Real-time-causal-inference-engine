@@ -2,6 +2,8 @@ package bridge
 
 import (
 	"math"
+
+	phase4 "absia/internal/intelligence/phase4_explanation"
 )
 
 // SCMFunc represents a structural causal equation.
@@ -62,17 +64,121 @@ func Piecewise(inputs []float64, noise float64) float64 {
 	return sum + noise
 }
 
-// SelectSCMFunc picks an appropriate SCM structure based on node variance/density.
-// This allows dynamic assignment while remaining pluggable.
-func SelectSCMFunc(variance float64) SCMFunc {
-	switch {
-	case variance < 0.1:
-		return Linear
-	case variance < 0.5:
-		return Polynomial
-	case variance < 0.8:
-		return Piecewise
-	default:
-		return Threshold // Highly volatile nodes treated as thresholds
+// FitLinearSCM fits a linear structural causal model using Ridge Regression.
+// It learns the coefficients (weights) for each parent based on the provided dataset.
+func FitLinearSCM(parentIDs []string, targetID string, samples []phase4.Sample) SCMFunc {
+	k := len(parentIDs)
+	if k == 0 {
+		return func(inputs []float64, noise float64) float64 {
+			return noise
+		}
 	}
+
+	n := len(samples)
+	if n == 0 {
+		return Linear
+	}
+
+	// Build X matrix (n x k+1) and y vector (n)
+	// Last column is 1.0 (intercept)
+	X := make([][]float64, n)
+	y := make([]float64, n)
+	for i, sample := range samples {
+		X[i] = make([]float64, k+1)
+		for j, pid := range parentIDs {
+			X[i][j] = sample[pid]
+		}
+		X[i][k] = 1.0
+		y[i] = sample[targetID]
+	}
+
+	// Compute X'X (k+1 x k+1)
+	XtX := make([][]float64, k+1)
+	for i := 0; i <= k; i++ {
+		XtX[i] = make([]float64, k+1)
+		for j := 0; j <= k; j++ {
+			sum := 0.0
+			for r := 0; r < n; r++ {
+				sum += X[r][i] * X[r][j]
+			}
+			XtX[i][j] = sum
+		}
+		// Ridge penalty to prevent singular matrices
+		XtX[i][i] += 1e-4
+	}
+
+	// Compute X'y (k+1)
+	Xty := make([]float64, k+1)
+	for i := 0; i <= k; i++ {
+		sum := 0.0
+		for r := 0; r < n; r++ {
+			sum += X[r][i] * y[r]
+		}
+		Xty[i] = sum
+	}
+
+	// Solve XtX * beta = Xty using Gaussian Elimination
+	beta := solveLinearSystem(XtX, Xty)
+
+	// beta[0:k] are the coefficients, beta[k] is the intercept
+	return func(inputs []float64, noise float64) float64 {
+		sum := beta[k] // intercept
+		for i, inp := range inputs {
+			if i < k && i < len(inputs) {
+				sum += beta[i] * inp
+			}
+		}
+		return sum + noise
+	}
+}
+
+// solveLinearSystem solves Ax = b using Gaussian elimination with partial pivoting.
+// A is modified in-place.
+func solveLinearSystem(A [][]float64, b []float64) []float64 {
+	n := len(b)
+	x := make([]float64, n)
+
+	// Forward elimination
+	for i := 0; i < n; i++ {
+		maxEl := math.Abs(A[i][i])
+		maxRow := i
+		for k := i + 1; k < n; k++ {
+			if math.Abs(A[k][i]) > maxEl {
+				maxEl = math.Abs(A[k][i])
+				maxRow = k
+			}
+		}
+
+		A[i], A[maxRow] = A[maxRow], A[i]
+		b[i], b[maxRow] = b[maxRow], b[i]
+
+		for k := i + 1; k < n; k++ {
+			if math.Abs(A[i][i]) < 1e-12 {
+				continue // fallback for extremely singular matrices
+			}
+			c := -A[k][i] / A[i][i]
+			for j := i; j < n; j++ {
+				if i == j {
+					A[k][j] = 0
+				} else {
+					A[k][j] += c * A[i][j]
+				}
+			}
+			b[k] += c * b[i]
+		}
+	}
+
+	// Back substitution
+	for i := n - 1; i >= 0; i-- {
+		if math.Abs(A[i][i]) < 1e-12 {
+			x[i] = 0 // Fallback
+			continue
+		}
+		x[i] = b[i] / A[i][i]
+		for k := i - 1; k >= 0; k-- {
+			b[k] -= A[k][i] * x[i]
+		}
+	}
+
+	return x
 }
