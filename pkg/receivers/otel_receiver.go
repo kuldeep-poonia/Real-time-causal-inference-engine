@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"absia/pkg/metricsstore"
@@ -126,7 +127,9 @@ func (r *OTLPReceiver) handleMetrics(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+		if !strings.Contains(strings.ToLower(nodeID), "absia") {
 		r.store.Put(nodeID, sample)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
