@@ -30,6 +30,7 @@ Output: Phase 4 CausalGraph (structural causal model)
 func ConvertPhase3ResultToPhase4Graph(
 	result phase3.InferenceResult,
 	graph *phase3.Graph,
+	dataset *phase4.Dataset,
 ) *phase4.CausalGraph {
 
 	if graph == nil {
@@ -44,9 +45,6 @@ func ConvertPhase3ResultToPhase4Graph(
 
 	// Convert nodes
 	for nodeID, node := range graph.Nodes {
-		variance := calculateVariance(node.Series)
-		scmFunc := SelectSCMFunc(variance)
-
 		cg.Nodes[nodeID] = &phase4.CausalNode{
 			ID:        nodeID,
 			Value:     node.State.Load, // Use ρ = λ/μ as node value
@@ -54,7 +52,7 @@ func ConvertPhase3ResultToPhase4Graph(
 			Lags:      make([]int, 0),
 			Timestamp: int(node.State.Timestamp),
 			Noise:     0.0,
-			Func:      func(inputs []float64, noise float64) float64 { return scmFunc(inputs, noise) },
+			// Func will be set after parents are assigned and sorted
 		}
 	}
 
@@ -110,6 +108,25 @@ func ConvertPhase3ResultToPhase4Graph(
 			n.Parents[i] = p.parent
 			n.Lags[i] = p.lag
 		}
+	}
+
+	// Second pass: fit linear SCMs now that parents are populated and sorted.
+	for _, n := range cg.Nodes {
+		parentIDs := make([]string, len(n.Parents))
+		for i, p := range n.Parents {
+			parentIDs[i] = p.ID
+		}
+		
+		// If dataset is available, use observational data to learn edge weights.
+		// Fallback to simple linear if no data is provided.
+		var scmFunc SCMFunc
+		if dataset != nil && len(dataset.Samples) > 0 {
+			scmFunc = FitLinearSCM(parentIDs, n.ID, dataset.Samples)
+		} else {
+			scmFunc = Linear
+		}
+		
+		n.Func = func(inputs []float64, noise float64) float64 { return scmFunc(inputs, noise) }
 	}
 
 	return cg
@@ -200,9 +217,6 @@ func ConvertPhase4GraphToPhase5Graph(
 	// Convert nodes
 	nodeMap := make(map[string]*phase5.CausalNode)
 	for nodeID, p4Node := range p4Graph.Nodes {
-		// p4Node doesn't have the original Series, so we estimate variance from noise or fallback to linear
-		scmFunc := SelectSCMFunc(p4Node.Noise) // Use noise as a proxy for variance here
-		
 		p5Node := &phase5.CausalNode{
 			ID:        p4Node.ID,
 			Value:     p4Node.Value,
@@ -210,7 +224,7 @@ func ConvertPhase4GraphToPhase5Graph(
 			Noise:     p4Node.Noise,
 			Parents:   make([]*phase5.CausalNode, 0),
 			Lags:      make([]int, 0),
-			Func:      func(inputs []float64, noise float64) float64 { return scmFunc(inputs, noise) },
+			Func:      p4Node.Func, // Copy the learned structural equation directly
 		}
 		nodeMap[nodeID] = p5Node
 		p5Graph.Nodes[nodeID] = p5Node
