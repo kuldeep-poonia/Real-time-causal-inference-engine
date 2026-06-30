@@ -73,7 +73,7 @@ func newTestRng(seed int64) func() float64 {
 func TestPipelineRejectsZeroServiceRate(t *testing.T) {
 	store := buildTestStore(10.0, 42)
 	store.Put("A", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: 0.0, QueueLength: 1.0, Timestamp: 100})
-	_, err := ExecuteFullPipelineFromStore("A", store)
+	_, err := ExecuteFullPipelineFromStore("A", store, nil)
 	if err == nil {
 		t.Error("expected error for serviceRate=0, got nil")
 	}
@@ -82,7 +82,7 @@ func TestPipelineRejectsZeroServiceRate(t *testing.T) {
 func TestPipelineRejectsNegativeServiceRate(t *testing.T) {
 	store := buildTestStore(5.0, 42)
 	store.Put("A", metricsstore.NodeSample{ArrivalRate: 10.0, ServiceRate: -1.0, QueueLength: 1.0, Timestamp: 100})
-	_, err := ExecuteFullPipelineFromStore("A", store)
+	_, err := ExecuteFullPipelineFromStore("A", store, nil)
 	if err == nil {
 		t.Error("expected error for serviceRate=-1, got nil")
 	}
@@ -91,14 +91,14 @@ func TestPipelineRejectsNegativeServiceRate(t *testing.T) {
 func TestPipelineRejectsNegativeArrivalRate(t *testing.T) {
 	store := buildTestStore(5.0, 42)
 	store.Put("A", metricsstore.NodeSample{ArrivalRate: -1.0, ServiceRate: 10.0, QueueLength: 1.0, Timestamp: 100})
-	_, err := ExecuteFullPipelineFromStore("A", store)
+	_, err := ExecuteFullPipelineFromStore("A", store, nil)
 	if err == nil {
 		t.Error("expected error for arrivalRate=-1, got nil")
 	}
 }
 
 func TestPipelineRejectsNilStore(t *testing.T) {
-	_, err := ExecuteFullPipelineFromStore("A", nil)
+	_, err := ExecuteFullPipelineFromStore("", nil, nil)
 	if err == nil {
 		t.Error("expected error for nil store, got nil")
 	}
@@ -106,7 +106,7 @@ func TestPipelineRejectsNilStore(t *testing.T) {
 
 func TestPipelineRejectsEmptyStore(t *testing.T) {
 	store := metricsstore.New(60)
-	_, err := ExecuteFullPipelineFromStore("A", store)
+	_, err := ExecuteFullPipelineFromStore("A", store, nil)
 	if err == nil {
 		t.Error("expected error for empty store, got nil")
 	}
@@ -116,8 +116,8 @@ func TestPipelineRejectsEmptyStore(t *testing.T) {
 
 func TestPipelineDeterminism(t *testing.T) {
 	store := buildTestStore(10.0, 42)
-	r1, err1 := ExecuteFullPipelineFromStore("A", store)
-	r2, err2 := ExecuteFullPipelineFromStore("A", store)
+	r1, err1 := ExecuteFullPipelineFromStore("A", store, nil)
+	r2, err2 := ExecuteFullPipelineFromStore("A", store, nil)
 	if err1 != nil || err2 != nil {
 		t.Fatalf("pipeline error: %v / %v", err1, err2)
 	}
@@ -144,7 +144,7 @@ func TestPipelineDeterminism(t *testing.T) {
 
 func TestDataSourceIsAlwaysReal(t *testing.T) {
 	store := buildTestStore(10.0, 42)
-	result, err := ExecuteFullPipelineFromStore("A", store)
+	result, err := ExecuteFullPipelineFromStore("A", store, nil)
 	if err != nil {
 		t.Fatalf("pipeline error: %v", err)
 	}
