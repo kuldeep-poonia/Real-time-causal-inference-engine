@@ -127,7 +127,7 @@ func TestFullPipelineE2E(t *testing.T) {
 				WallTime:    time.Now().Add(time.Duration(i*8) * time.Second),
 			})
 		}
-		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
+		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store, nil)
 		if err != nil {
 			t.Errorf("pipeline error [%s] (expected success): %v", rc.name, err)
 			report.PipelineCases = append(report.PipelineCases, PipelineCase{
@@ -268,7 +268,7 @@ func TestFullPipelineE2E(t *testing.T) {
 				WallTime:    time.Now().Add(time.Duration(i*8) * time.Second),
 			})
 		}
-		_, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
+		_, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store, nil)
 		didErr := err != nil
 		correct := didErr == gc.expectErr
 		if !correct {
@@ -308,7 +308,7 @@ func TestFullPipelineE2E(t *testing.T) {
 				WallTime:    time.Now().Add(time.Duration(i*8) * time.Second),
 			})
 		}
-		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
+		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store, nil)
 		if err != nil || res == nil {
 			report.SafetyContract = append(report.SafetyContract, SafetyContractCase{
 				CaseName: sc.name, SafetyNonNil: false,
