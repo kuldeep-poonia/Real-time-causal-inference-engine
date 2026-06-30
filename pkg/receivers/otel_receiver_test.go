@@ -12,7 +12,7 @@ import (
 
 func TestOTLPReceiver(t *testing.T) {
 	store := metricsstore.New(20)
-	receiver := receivers.NewOTLPReceiver(store)
+	receiver := receivers.NewOTLPReceiver(store, nil)
 
 	jsonPayload := []byte(`{
 		"resourceMetrics": [
