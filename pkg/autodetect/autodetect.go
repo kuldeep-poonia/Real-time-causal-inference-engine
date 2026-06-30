@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -47,14 +48,35 @@ func DiscoverContainers(ctx context.Context) ([]ContainerInfo, error) {
 	}
 	out := make([]ContainerInfo, 0, len(raw))
 	for _, c := range raw {
+		name := containerName(c.Names, c.ID)
+		if isInfrastructureContainer(name) {
+			continue
+		}
 		out = append(out, ContainerInfo{
 			ID:    c.ID,
-			Name:  containerName(c.Names, c.ID),
+			Name:  name,
 			Image: c.Image,
 			State: c.State,
 		})
 	}
 	return out, nil
+}
+
+func isInfrastructureContainer(name string) bool {
+	lower := strings.ToLower(name)
+	if strings.Contains(lower, "absia") {
+		return true
+	}
+	excludeEnv := os.Getenv("ABSIA_EXCLUDE_SERVICES")
+	if excludeEnv != "" {
+		for _, svc := range strings.Split(excludeEnv, ",") {
+			svc = strings.TrimSpace(strings.ToLower(svc))
+			if svc != "" && strings.Contains(lower, svc) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // StartContainerDiscovery logs all running containers at startup and then
@@ -109,6 +131,7 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 	cli := docker.NewClient()
 
 	baselines := make(map[string]*signals.AdaptiveBaseline)
+	idToName := make(map[string]string)
 	var mu sync.Mutex
 
 	log.Info("autodetect: metrics collection started", slog.Duration("interval", statsInterval))
@@ -129,9 +152,16 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 				continue
 			}
 
-			// Ensure a baseline exists for every currently running container
+			// Filter out infrastructure containers and map IDs to Names
+			var filtered []docker.Container
 			mu.Lock()
 			for _, c := range containers {
+				name := containerName(c.Names, c.ID)
+				if isInfrastructureContainer(name) {
+					continue
+				}
+				idToName[c.ID] = name
+				filtered = append(filtered, c)
 				if _, exists := baselines[c.ID]; !exists {
 					baselines[c.ID] = signals.NewAdaptiveBaseline(c.ID)
 				}
@@ -139,7 +169,7 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 			mu.Unlock()
 
 			var wg sync.WaitGroup
-			for _, c := range containers {
+			for _, c := range filtered {
 				wg.Add(1)
 				go func(c docker.Container) {
 					defer wg.Done()
@@ -155,15 +185,19 @@ func PushContainerStatsToStore(ctx context.Context, store *metricsstore.Store, l
 			}
 			wg.Wait()
 
-			// Evict stale baselines for containers no longer running.
+			// Evict stale baselines and completely remove their data from the store
 			mu.Lock()
-			alive := make(map[string]bool, len(containers))
-			for _, c := range containers {
+			alive := make(map[string]bool, len(filtered))
+			for _, c := range filtered {
 				alive[c.ID] = true
 			}
 			for id := range baselines {
 				if !alive[id] {
 					delete(baselines, id)
+					if name, ok := idToName[id]; ok {
+						store.RemoveNode(name)
+						delete(idToName, id)
+					}
 				}
 			}
 			mu.Unlock()
@@ -237,6 +271,15 @@ func collectOne(
 
 	name := containerName(c.Names, c.ID)
 	now := time.Now()
+
+	if name == "llm" {
+		log.Debug("llm metrics debug",
+			slog.Float64("compute", fused.ComputePressure),
+			slog.Float64("memory", fused.MemoryPressure),
+			slog.Float64("network", fused.NetworkPressure),
+			slog.Time("timestamp", now),
+		)
+	}
 
 	// 0. Fallback Chain Check (OTLP > Docker)
 	if latest, ok := store.GetLatestSample(name); ok {
