@@ -125,7 +125,7 @@ func runWorker(workerID int, lambda, mu, q float64) LoadRun {
 
 		start := time.Now()
 		store := metricsstore.New(4)
-		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
+		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store, nil)
 		run.ExecTimeMS = float64(time.Since(start).Nanoseconds()) / 1e6
 
 		if err != nil {
@@ -308,7 +308,7 @@ func TestConcurrentStress(t *testing.T) {
 		// Since we can't directly call setPrevRanking (unexported), we
 		// exercise it through the public API.
 		store := metricsstore.New(4)
-		_, _ = orchestrator.ExecuteFullPipelineFromStore("test-node", store)
+		_, _ = orchestrator.ExecuteFullPipelineFromStore("test-node", store, nil)
 		rankA := orchestrator.GetPrevRanking(targetA)
 		rankB := orchestrator.GetPrevRanking(targetB)
 
@@ -406,7 +406,7 @@ func TestConcurrentStress(t *testing.T) {
 		wg.Wait()
 
 		// Now run pipeline with this store
-		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store)
+		res, err := orchestrator.ExecuteFullPipelineFromStore("test-node", store, nil)
 		pipelineRan := err == nil && res != nil
 		safetyOK := pipelineRan && res.SafetyResult != nil
 
