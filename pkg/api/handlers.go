@@ -592,18 +592,35 @@ func buildSafetyGate(sr *orchestrator.SafetyResult) SafetyGate {
 	for _, p := range sr.Fallback.ProbeRecommendations {
 		probeNodes = append(probeNodes, p.NodeID+":"+p.Metric)
 	}
-	return SafetyGate{
-		ConfidenceScore:   sr.Confidence.Score,
-		ConfidenceState:   sr.Confidence.State.String(),
-		LatentRisk:        sr.LatentRisk.Level.String(),
-		FallbackTriggered: sr.Fallback.IsUnknown,
-		FallbackReasons:   reasons,
-		ProbeNodes:        probeNodes,
-		PosteriorVariance: sr.LatentRisk.PosteriorVariance,
-		PosteriorPrecision: sr.Confidence.Components.PosteriorPrecision,
-		Determinism:       sr.Confidence.Components.Determinism,
 
-		// Phase 4 additions
+	// Normalize confidence contributions so they sum to 1.0.
+	// Each value represents the fraction of total score attributable to that component.
+	bayesian := sr.Confidence.Components.PosteriorPrecision
+	causal := sr.Confidence.Components.Determinism
+	physics := sr.Confidence.Components.ResidualExplained
+	telemetry := sr.Confidence.Components.RoleConsistency
+	contribSum := bayesian + causal + physics + telemetry
+	if contribSum > 0 {
+		bayesian /= contribSum
+		causal /= contribSum
+		physics /= contribSum
+		telemetry /= contribSum
+	} else {
+		bayesian, causal, physics, telemetry = 0.25, 0.25, 0.25, 0.25
+	}
+
+	return SafetyGate{
+		ConfidenceScore:    sr.Confidence.Score,
+		ConfidenceState:    sr.Confidence.State.String(),
+		LatentRisk:         sr.LatentRisk.Level.String(),
+		FallbackTriggered:  sr.Fallback.IsUnknown,
+		FallbackReasons:    reasons,
+		ProbeNodes:         probeNodes,
+		PosteriorVariance:  sr.LatentRisk.PosteriorVariance,
+		PosteriorPrecision: sr.Confidence.Components.PosteriorPrecision,
+		Determinism:        sr.Confidence.Components.Determinism,
+
+		// Phase 4 Monte Carlo statistics
 		ConfidenceStd:        sr.Confidence.Stats.Std,
 		ConfidenceMedian:     sr.Confidence.Stats.Median,
 		ConfidenceP05:        sr.Confidence.Stats.P05,
@@ -613,10 +630,11 @@ func buildSafetyGate(sr *orchestrator.SafetyResult) SafetyGate {
 		AleatoricUncertainty: sr.Confidence.Stats.AleatoricUncert,
 		EpistemicUncertainty: sr.Confidence.Stats.EpistemicUncert,
 
-		BayesianContribution:  sr.Confidence.Components.PosteriorPrecision,
-		CausalContribution:    sr.Confidence.Components.Determinism, // Mapping Determinism/Role Consistency to causal
-		PhysicsContribution:   sr.Confidence.Components.ResidualExplained,
-		TelemetryContribution: 1.0, // Assuming static metric quality or derived
+		// Normalized contributions (sum to 1.0)
+		BayesianContribution:  bayesian,
+		CausalContribution:    causal,
+		PhysicsContribution:   physics,
+		TelemetryContribution: telemetry,
 	}
 }
 
@@ -834,13 +852,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	var missingServices []string
 	coverage := 1.0
 	if globalTopoMgr != nil {
-		observedNodes := make([]string, 0, len(req.Nodes))
-		for _, n := range req.Nodes {
-			observedNodes = append(observedNodes, n.NodeID)
-		}
-		if len(observedNodes) == 0 { // For implicit mode
-			observedNodes = result.RealisticData.Nodes
-		}
+		observedNodes := globalStore.GetAllNodeIDs()
 		missingServices = globalTopoMgr.GetMissingServices(observedNodes)
 		if total := len(observedNodes) + len(missingServices); total > 0 {
 			coverage = float64(len(observedNodes)) / float64(total)
@@ -856,7 +868,20 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	if result.SafetyResult != nil {
 		stats = result.SafetyResult.Confidence.Stats
 	}
-	decision := confidence.GenerateDecision(nodeID, sg.ConfidenceScore, sg.LatentRisk, stats, missingServices)
+	dynamics := ""
+	if result.Phase2Dynamics != nil {
+		dynamics = string(result.Phase2Dynamics.Type)
+	}
+	decision := confidence.GenerateDecision(confidence.DecisionInput{
+		Target:          nodeID,
+		RootCause:       result.PrimaryRootCause(),
+		Score:           sg.ConfidenceScore,
+		LatentRisk:      sg.LatentRisk,
+		Dynamics:        dynamics,
+		Stats:           stats,
+		MissingServices: missingServices,
+		FallbackUsed:    sg.FallbackTriggered,
+	})
 
 	// Cache for /explore and /semantics endpoints.
 	cacheSemantics(sem, decision.ConfidenceNarrative, decision.IncidentTitle)
@@ -882,7 +907,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Timeline:            decision.Timeline,
 		Narrative:           decision.Narrative,
 		Evidence:            sem.Evidence,
-		Remediation:         sem.Remediations,
+		Remediation:         sem.Remediation,
 	}
 
 	if sample, ok := globalStore.GetLatestSample(nodeID); ok {
