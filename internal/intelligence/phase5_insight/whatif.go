@@ -34,7 +34,7 @@ func SimulateWhatIf(
 	rootCause string,
 	store *metricsstore.Store,
 ) []WhatIfResult {
-	if p4Graph == nil || dataset == nil {
+	if p4Graph == nil {
 		return nil
 	}
 
@@ -61,6 +61,25 @@ func SimulateWhatIf(
 	targetThreshold := 0.8
 	// In a real scenario, we'd query pkg/adaptive for the threshold.
 	// For now, we assume that any load/value below 0.8 represents "recovery".
+
+	if dataset == nil || len(dataset.Samples) == 0 {
+		for _, inv := range interventions {
+			recMin := 2
+			risk := "low"
+			if inv.Type == "Restart" {
+				recMin = 5
+				risk = "medium"
+			}
+			results = append(results, WhatIfResult{
+				Action:                   inv.Action,
+				RecoveryProbability:      0.0,
+				EstimatedRecoveryMinutes: recMin,
+				Risk:                     risk,
+				ConfidenceInterval:       []float64{0.0, 0.0},
+			})
+		}
+		return results
+	}
 
 	// Number of Monte Carlo samples
 	numSamples := 100
@@ -101,7 +120,10 @@ func SimulateWhatIf(
 			}
 		}
 
-		prob := float64(recoveredCount) / float64(limit)
+		var prob float64
+		if limit > 0 {
+			prob = float64(recoveredCount) / float64(limit)
+		}
 		
 		// Sort simulated values to get 95% CI
 		sort.Float64s(simulatedValues)

@@ -367,7 +367,7 @@ type AnalysisResponse struct {
 	Remediation         []orchestrator.RemediationAction `json:"remediation,omitempty"`
 
 	// Phase 5: Why Engine (Causal Chain)
-	CausalChain  []evidence.EvidenceLink `json:"causal_chain,omitempty"`
+	CausalChain  *evidence.CausalChain   `json:"causal_chain,omitempty"`
 	WhatIf       []phase5.WhatIfResult   `json:"what_if,omitempty"`
 	SafestAction map[string]string       `json:"safest_action,omitempty"`
 }
@@ -916,7 +916,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Remediation:         sem.Remediation,
 
 		// Phase 5: Why Engine
-		CausalChain:  result.Phase5CausalChain.Links,
+		CausalChain:  &result.Phase5CausalChain,
 		WhatIf:       result.Phase5WhatIf,
 		SafestAction: result.Phase5SafestAction,
 	}
