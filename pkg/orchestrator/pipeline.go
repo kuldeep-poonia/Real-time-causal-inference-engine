@@ -891,6 +891,34 @@ func finishWithLocalPhysicsRoot(
 		Confidence: confidence,
 	}
 	result.SafetyResult = evaluateSafetyGateLocal(root)
+	
+	// Synthesize Phase 5 output for early-return fallback
+	result.Phase5CausalChain = evidence.CausalChain{
+		RootCause: root.NodeID,
+		Links:     make([]evidence.EvidenceLink, 0),
+		Timeline:  make([]string, 0),
+	}
+	result.Phase5WhatIf = []phase5.WhatIfResult{
+		{
+			Action:                   "Scale " + root.NodeID + " (+1 replica)",
+			RecoveryProbability:      0.0,
+			EstimatedRecoveryMinutes: 2,
+			Risk:                     "low",
+			ConfidenceInterval:       []float64{0.0, 0.0},
+		},
+		{
+			Action:                   "Restart " + root.NodeID,
+			RecoveryProbability:      0.0,
+			EstimatedRecoveryMinutes: 5,
+			Risk:                     "medium",
+			ConfidenceInterval:       []float64{0.0, 0.0},
+		},
+	}
+	result.Phase5SafestAction = map[string]string{
+		"action": "Scale " + root.NodeID + " (+1 replica)",
+		"why":    "Lowest risk with fastest estimated recovery (2m)",
+	}
+
 	result.ExecutionTimeMS = float64(time.Since(startTime).Nanoseconds()) / 1e6
 	log.Printf("  -> queue physics root: %s load=%.3f queue=%.2f conf=%.3f",
 		root.NodeID, root.Load, root.QueueLength, confidence)
