@@ -3,6 +3,7 @@ package phase2_pattern
 import (
 	"math"
 	"sort"
+	"sync"
 )
 
 /*
@@ -172,9 +173,18 @@ func computeDynamicsIndicator(matrix [][]float64) DynamicsIndicator {
 // ─────────────────────────────────────────────
 
 type SystemMemory struct {
+	mu             sync.RWMutex
 	EnergyHistory  []float64
 	StateHistory   []string
 	PatternHistory []PatternType
+}
+
+func (m *SystemMemory) GetEnergyHistory() []float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	copied := make([]float64, len(m.EnergyHistory))
+	copy(copied, m.EnergyHistory)
+	return copied
 }
 
 // SystemState — EXTENDED with Dynamics field.
@@ -208,7 +218,7 @@ func BuildSystemState(
 ) SystemState {
 
 	energy := computeEnergyFlow(matrix)
-	baseline := rollingMean(mem.EnergyHistory)
+	baseline := rollingMean(mem.GetEnergyHistory())
 	normEnergy := normalize(energy, baseline)
 	trend := (energy - baseline) / (baseline + 1e-6)
 	trans := computeTransitionStrength(patterns)
@@ -370,6 +380,8 @@ func updateMemory(
 	state string,
 	pattern PatternType,
 ) {
+	mem.mu.Lock()
+	defer mem.mu.Unlock()
 	mem.EnergyHistory = append(mem.EnergyHistory, energy)
 	mem.StateHistory = append(mem.StateHistory, state)
 	mem.PatternHistory = append(mem.PatternHistory, pattern)
