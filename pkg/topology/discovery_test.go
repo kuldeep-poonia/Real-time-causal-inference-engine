@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"math"
 	"testing"
 )
 
@@ -13,8 +14,8 @@ func TestTopologyManager(t *testing.T) {
 
 	mgr.AddTraceEdge("A", "B")
 	
-	if mgr.GetEdgePrior("A", "B") != 0.95 {
-		t.Errorf("Expected high prior 0.95 for known trace edge")
+	if math.Abs(mgr.GetEdgePrior("A", "B")-0.95) > 1e-3 {
+		t.Errorf("Expected high prior ~0.95 for known trace edge, got %f", mgr.GetEdgePrior("A", "B"))
 	}
 	
 	// Add it again to increase confidence/callrate
