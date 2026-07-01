@@ -24,6 +24,7 @@ import (
 	"absia/pkg/orchestrator"
 	"absia/pkg/topology"
 	"absia/pkg/confidence"
+	"absia/pkg/evidence"
 )
 
 /*
@@ -364,6 +365,11 @@ type AnalysisResponse struct {
 	Narrative           []string                         `json:"narrative,omitempty"`
 	Evidence            []orchestrator.FailureEvidence   `json:"evidence,omitempty"`
 	Remediation         []orchestrator.RemediationAction `json:"remediation,omitempty"`
+
+	// Phase 5: Why Engine (Causal Chain)
+	CausalChain  []evidence.EvidenceLink `json:"causal_chain,omitempty"`
+	WhatIf       []phase5.WhatIfResult   `json:"what_if,omitempty"`
+	SafestAction map[string]string       `json:"safest_action,omitempty"`
 }
 
 type ExplainResponse struct {
@@ -908,6 +914,11 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Narrative:           decision.Narrative,
 		Evidence:            sem.Evidence,
 		Remediation:         sem.Remediation,
+
+		// Phase 5: Why Engine
+		CausalChain:  result.Phase5CausalChain.Links,
+		WhatIf:       result.Phase5WhatIf,
+		SafestAction: result.Phase5SafestAction,
 	}
 
 	if sample, ok := globalStore.GetLatestSample(nodeID); ok {
