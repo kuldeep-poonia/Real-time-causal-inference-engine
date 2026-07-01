@@ -24,6 +24,7 @@ import (
 	phase4 "absia/internal/intelligence/phase4_explanation"
 	phase5 "absia/internal/intelligence/phase5_insight"
 	"absia/pkg/cache"
+	"absia/pkg/evidence"
 )
 
 //
@@ -74,9 +75,12 @@ type PipelineResult struct {
 	Phase4Explanation *phase4.Explanation
 
 	// Phase 5
-	Phase5BeliefState phase5.BeliefState
-	Phase5Actions     []phase5.Action
-	Phase5Policy      *phase5.Policy
+	Phase5BeliefState  phase5.BeliefState
+	Phase5Actions      []phase5.Action
+	Phase5Policy       *phase5.Policy
+	Phase5CausalChain  evidence.CausalChain
+	Phase5WhatIf       []phase5.WhatIfResult
+	Phase5SafestAction map[string]string
 
 	// Safety gate is mandatory and always evaluated.
 	SafetyResult *SafetyResult
@@ -739,6 +743,23 @@ func ExecuteFullPipelineFromStore(
 			slog.Warn("policy store save failed",
 				slog.String("target", targetNodeID),
 				slog.Any("error", err))
+		}
+	}
+
+	// PHASE 5: WHY ENGINE (Temporal Evidence Chain & What-If Simulator)
+	log.Println("[ORCHESTRATOR] Phase 5: Why Engine generation...")
+	rootCause := result.PrimaryRootCause()
+	if rootCause != "" {
+		result.Phase5CausalChain = evidence.BuildCausalChain(phase5Graph, rootCause, targetNodeID, store)
+		result.Phase5WhatIf = phase5.SimulateWhatIf(phase4Graph, phase4Dataset, targetNodeID, rootCause, store)
+		
+		// Rank Actions
+		descendants := len(phase5Graph.Nodes) // simplistic blast radius
+		targetSeverity := 0.8 // generic high severity for demonstration
+		result.Phase5WhatIf = phase5.RankActions(result.Phase5WhatIf, targetSeverity, descendants)
+		
+		if safest, ok := phase5.GetSafestAction(result.Phase5WhatIf); ok {
+			result.Phase5SafestAction = safest
 		}
 	}
 
